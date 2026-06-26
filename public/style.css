@@ -28028,6 +28028,37 @@ body.mandarin-home-active .agency-shell-nav-item:disabled:hover {
   color: #d8cec6 !important;
 }
 
+.remember-access-row {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: -2px 0 12px;
+  color: #6f5f57;
+  font-family: Montserrat, Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+
+.remember-access-row.hidden {
+  display: none !important;
+}
+
+.remember-access-row input {
+  width: 16px !important;
+  height: 16px !important;
+  flex: 0 0 16px;
+  margin: 0 !important;
+  accent-color: #d1785f;
+}
+
+body.app-dark-theme .remember-access-row {
+  color: #d8cec6;
+}
+
 body.mandarin-home-active #agencyProfilePowerToggle.agency-profile-power-toggle.is-online {
   border-color: rgba(34, 197, 94, .58) !important;
   background: #f0fdf4 !important;

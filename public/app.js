@@ -12,6 +12,7 @@ let pendingAgencyProfileChoicePanel = '';
 const profileConnectingIds = new Set();
 const AGENCY_PANEL_KEY = 'agencyos_active_panel';
 const AGENCY_ACCOUNT_TAB_KEY = 'agencyos_account_tab';
+const REMEMBER_ACCESS_KEY = 'agencyos_remember_access';
 const savedAgencyAccountTab = localStorage.getItem(AGENCY_ACCOUNT_TAB_KEY);
 let agencyAccountTab = ['ladies', 'operators', 'salary', 'translator'].includes(savedAgencyAccountTab) ? savedAgencyAccountTab : 'ladies';
 const resolvingProfiles = new Set();
@@ -1007,6 +1008,8 @@ const usernameInput = document.getElementById('usernameInput');
 const passwordInput = document.getElementById('passwordInput');
 const accessBtn = document.getElementById('accessBtn');
 const accessStatus = document.getElementById('accessStatus');
+const rememberAccessRow = document.getElementById('rememberAccessRow');
+const rememberAccessInput = document.getElementById('rememberAccessInput');
 const mandarinHomeScreen = document.getElementById('mandarinHomeScreen');
 const agencyShellUserName = document.getElementById('agencyShellUserName');
 const agencyShellUserRole = document.getElementById('agencyShellUserRole');
@@ -6445,6 +6448,39 @@ function activateAgencyPanel(view, options = {}) {
   }
 }
 
+function readRememberedAccess() {
+  try {
+    return JSON.parse(localStorage.getItem(REMEMBER_ACCESS_KEY) || 'null') || null;
+  } catch {
+    return null;
+  }
+}
+
+function syncRememberedAccess(needsSetup = false) {
+  const saved = readRememberedAccess();
+  rememberAccessRow?.classList.toggle('hidden', needsSetup);
+  if (rememberAccessInput) rememberAccessInput.checked = !needsSetup && Boolean(saved?.remember);
+  if (!needsSetup && saved?.remember) {
+    if (usernameInput) usernameInput.value = saved.username || '';
+    if (passwordInput) passwordInput.value = saved.password || '';
+  } else {
+    if (usernameInput) usernameInput.value = '';
+    if (passwordInput) passwordInput.value = '';
+  }
+}
+
+function saveRememberedAccessAfterLogin(username, password) {
+  if (!rememberAccessInput?.checked || setupMode) {
+    localStorage.removeItem(REMEMBER_ACCESS_KEY);
+    return;
+  }
+  localStorage.setItem(REMEMBER_ACCESS_KEY, JSON.stringify({
+    remember: true,
+    username: String(username || ''),
+    password: String(password || '')
+  }));
+}
+
 function showLogin(needsSetup = false) {
   setupMode = needsSetup;
   document.body.classList.remove('auth-pending', 'auth-ready', 'profile-choice-auth', 'agency-profile-choice-modal', 'mandarin-home-active');
@@ -6460,8 +6496,9 @@ function showLogin(needsSetup = false) {
   if (passwordInput) passwordInput.placeholder = needsSetup ? 'Create your password' : 'Write your password';
   accessBtn.textContent = needsSetup ? 'Create Account' : 'Log In';
   accessStatus.textContent = '';
+  syncRememberedAccess(needsSetup);
   accessScreen.classList.remove('hidden');
-  setTimeout(() => usernameInput?.focus(), 50);
+  setTimeout(() => (usernameInput?.value ? passwordInput : usernameInput)?.focus(), 50);
 }
 
 function showMandarinHome() {
@@ -7567,15 +7604,18 @@ function renderAdminProfileChecklist(profiles, options = {}) {
 
 async function enterCrm() {
   accessStatus.textContent = setupMode ? 'Creating administrator...' : 'Signing in...';
+  const loginUsername = usernameInput.value.trim();
+  const loginPassword = passwordInput.value;
   try {
     const response = await fetch(setupMode ? '/api/auth/setup' : '/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: usernameInput.value.trim(), password: passwordInput.value })
+      body: JSON.stringify({ username: loginUsername, password: loginPassword })
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Could not sign in');
-    passwordInput.value = '';
+    saveRememberedAccessAfterLogin(loginUsername, loginPassword);
+    if (!rememberAccessInput?.checked || setupMode) passwordInput.value = '';
     applySession(result, !(activeProfileId && ladyConnected));
   } catch (error) {
     accessStatus.textContent = error.message;
