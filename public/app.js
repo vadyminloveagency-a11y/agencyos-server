@@ -1640,6 +1640,7 @@ function syncAgencyNavLocks() {
   const profileReady = isActiveProfileOnline();
   mandarinHomeScreen?.querySelectorAll('.agency-shell-nav-item[data-agency-view]').forEach(item => {
     const locked = isProfileWorkView(item.dataset.agencyView) && !profileReady;
+    item.classList.toggle('is-profile-hidden', locked);
     item.classList.toggle('is-profile-locked', locked);
     item.disabled = locked;
     if (locked) {
@@ -1650,6 +1651,10 @@ function syncAgencyNavLocks() {
       item.removeAttribute('title');
     }
   });
+  const currentPanel = normalizeAgencyPanel(localStorage.getItem(AGENCY_PANEL_KEY) || 'home');
+  if (!profileReady && isProfileWorkView(currentPanel)) {
+    activateAgencyPanel('home', { persist: false });
+  }
 }
 
 async function connectProfileById(profileId, options = {}) {

@@ -28022,6 +28022,10 @@ body.mandarin-home-active .agency-shell-nav-item:disabled {
   filter: grayscale(.35);
 }
 
+body.mandarin-home-active .agency-shell-nav-item.is-profile-hidden {
+  display: none !important;
+}
+
 body.mandarin-home-active .agency-shell-nav-item.is-profile-locked:hover,
 body.mandarin-home-active .agency-shell-nav-item:disabled:hover {
   background: transparent !important;
