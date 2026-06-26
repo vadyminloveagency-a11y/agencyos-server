@@ -1,0 +1,23 @@
+{
+  "name": "agencyos-server",
+  "version": "0.1.1",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vadyminloveagency-a11y/agencyos-server.git"
+  },
+  "homepage": "https://github.com/vadyminloveagency-a11y/agencyos-server",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js && node --check scripts/export-runtime-data.mjs"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.3",
+    "playwright": "^1.61.1"
+  }
+}
