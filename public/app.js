@@ -32,6 +32,7 @@ let syncDotsCount = 0;
 let ladyConnected = Boolean(activeProfileId) && localStorage.getItem(`dream_team_lady_connected_${activeProfileId}`) === '1';
 let ladyDisconnectInProgress = false;
 let profileChoiceConnecting = false;
+document.body.classList.toggle('agency-desktop-app', Boolean(window.agencyElectron));
 if (!ladyConnected && !['stats', 'adminPanel', 'settings'].includes(currentView)) {
   currentView = 'workspace';
   localStorage.setItem('dream_crm_view', 'workspace');
@@ -6213,7 +6214,11 @@ showExtensionStatus(ladyConnected
 let setupMode = false;
 
 function normalizeAgencyPanel(view) {
-  return ['home', 'account-manager', 'dashboard', 'inbox', 'favorites', 'letterbot', 'sender'].includes(view) ? view : 'account-manager';
+  const panel = ['home', 'account-manager', 'dashboard', 'inbox', 'favorites', 'letterbot', 'sender'].includes(view) ? view : 'account-manager';
+  if (currentUser?.role === 'director' && ['inbox', 'favorites', 'letterbot', 'sender'].includes(panel)) {
+    return 'dashboard';
+  }
+  return panel;
 }
 
 function syncAgencyAccountTabs() {

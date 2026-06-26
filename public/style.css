@@ -23831,6 +23831,10 @@ body.agency-shell-collapsed .mandarin-home-screen {
   color: #ffffff;
 }
 
+body.owner-user .agency-shell-nav-item[data-director-hidden="true"] {
+  display: none !important;
+}
+
 .agency-shell-nav-icon {
   width: 15px;
   display: inline-grid;
@@ -27940,13 +27944,17 @@ body.mandarin-home-active .agency-home-panel.hidden {
   top: 2px;
   right: 96px;
   z-index: 2147483000;
-  display: inline-flex;
+  display: none;
   align-items: center;
   gap: 5px;
   padding: 3px;
   border: 1px solid #eadbd4;
   border-radius: 10px;
   background: #fffaf7;
+}
+
+body.agency-desktop-app .agency-home-toolbar {
+  display: inline-flex;
 }
 
 .agency-home-toolbar button {
