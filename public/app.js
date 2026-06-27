@@ -14,6 +14,16 @@ const AGENCY_PANEL_KEY = 'agencyos_active_panel';
 const AGENCY_ACCOUNT_TAB_KEY = 'agencyos_account_tab';
 const REMEMBER_ACCESS_KEY = 'agencyos_remember_access';
 const AGENCY_DESKTOP_CLIENT = Boolean(window.agencyElectron) || /Electron/i.test(navigator.userAgent || '');
+const AGENCY_DESKTOP_SESSION_KEY = 'agencyos_desktop_session_id';
+if (AGENCY_DESKTOP_CLIENT) {
+  const desktopSessionId = new URLSearchParams(window.location.search).get('desktopVersion') || 'desktop';
+  if (localStorage.getItem(AGENCY_DESKTOP_SESSION_KEY) !== desktopSessionId) {
+    Object.keys(localStorage)
+      .filter(key => key.startsWith('dream_team_lady_connected_'))
+      .forEach(key => localStorage.removeItem(key));
+    localStorage.setItem(AGENCY_DESKTOP_SESSION_KEY, desktopSessionId);
+  }
+}
 const EMBEDDED_INDEX_PARAMS = new URLSearchParams(window.location.search);
 if (window.self !== window.top && EMBEDDED_INDEX_PARAMS.get('embedded') === '1') {
   const redirect = new URL('workspace.html', window.location.href);
@@ -2246,11 +2256,14 @@ async function connectProfileById(profileId, options = {}) {
 async function prepareLocalDreamProfile(profileId) {
   const id = String(profileId || '');
   if (!window.agencyElectron?.prepareDreamProfile) return true;
-  const result = await window.agencyElectron.prepareDreamProfile(id);
-  if (result?.ok === false) {
-    throw new Error(result.error || 'Could not login this profile in Dream on this PC');
+  let lastError = '';
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const result = await window.agencyElectron.prepareDreamProfile(id);
+    if (result?.ok !== false) return true;
+    lastError = result.error || 'Could not login this profile in Dream on this PC';
+    if (attempt < 3) await new Promise(resolve => setTimeout(resolve, 3500));
   }
-  return true;
+  throw new Error(lastError || 'Could not login this profile in Dream on this PC');
 }
 
 async function switchWorkingProfile(profileId, options = {}) {
@@ -2296,14 +2309,17 @@ async function switchWorkingProfile(profileId, options = {}) {
 
 async function connectAllProfiles() {
   const previousProfileId = activeProfileId;
-  const errors = [];
-  for (const profile of availableProfiles) {
-    try {
-      await connectProfileById(profile.id, { syncInbox: false, maxPages: 1 });
-    } catch (error) {
-      errors.push(`${profile.name || profile.id}: ${error.message || error}`);
-    }
-  }
+  const results = await Promise.allSettled(
+    availableProfiles.map(profile =>
+      connectProfileById(profile.id, { syncInbox: false, maxPages: 1 })
+        .then(() => ({ profile }))
+    )
+  );
+  const errors = results
+    .map((result, index) => result.status === 'rejected'
+      ? `${availableProfiles[index]?.name || availableProfiles[index]?.id}: ${result.reason?.message || result.reason}`
+      : '')
+    .filter(Boolean);
   renderSidebarProfileDock();
   if (previousProfileId && availableProfiles.some(profile => profile.id === previousProfileId)) {
     await switchWorkingProfile(previousProfileId, { reason: 'connect-all' });
