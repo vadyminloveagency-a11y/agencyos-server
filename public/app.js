@@ -1642,7 +1642,7 @@ function setProfileSwitchOverlay(active, profile = null) {
 
 function clearProfileSwitchOverlayOnFrameLoad() {
   if (document.body.classList.contains('agency-profile-switching')) {
-    setProfileSwitchOverlay(false);
+    waitForAgencyPaint().then(() => setProfileSwitchOverlay(false));
   }
 }
 const cancelAddProfileBtn = document.getElementById('cancelAddProfileBtn');
@@ -6790,6 +6790,38 @@ agencyChatManIdInput?.addEventListener('keydown', event => {
   if (event.key === 'Enter') addChatFavorite(agencyChatManIdInput, agencyChatAddManBtn);
 });
 
+async function refreshCurrentAgencyPanel() {
+  const panel = getActiveAgencyPanel() || normalizeAgencyPanel(localStorage.getItem(AGENCY_PANEL_KEY) || 'dashboard');
+  if (panel === 'dashboard') {
+    if (agencyDashboardMode === 'bonuses') await loadAgencyDashboardBonuses();
+    else await loadAgencyDashboardOperators({ skipAutoBalance: true });
+    return true;
+  }
+  if (panel === 'inbox') {
+    refreshWorkspaceEmbedInPlace('manual-refresh');
+    return true;
+  }
+  if (panel === 'favorites') {
+    if (agencyFavoritesTab === 'chat') await loadChatFavorites();
+    else await loadMen({ skipAutoOnline: true });
+    mountAgencyFavoritesView();
+    updateAgencyFavoritesCount();
+    return true;
+  }
+  if (panel === 'account-manager') {
+    await loadAgencyAccountManager();
+    return true;
+  }
+  activateAgencyPanel(panel, { persist: false, reloadInbox: panel === 'inbox', reloadFavorites: panel === 'favorites' });
+  return true;
+}
+
+function waitForAgencyPaint() {
+  return new Promise(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
+}
+
 async function runAgencyNavigation(action) {
   const command = String(action || '');
   if (command === 'back') {
@@ -6797,14 +6829,19 @@ async function runAgencyNavigation(action) {
     return;
   }
   if (command === 'refresh') {
-    setProfileSwitchOverlay(true);
     if (agencyRefreshBtn) {
       agencyRefreshBtn.disabled = true;
       agencyRefreshBtn.classList.add('is-reloading');
     }
-    requestAnimationFrame(() => {
-      setTimeout(() => window.location.reload(), 120);
-    });
+    try {
+      await refreshCurrentAgencyPanel();
+    } finally {
+      await waitForAgencyPaint();
+      if (agencyRefreshBtn) {
+        agencyRefreshBtn.disabled = false;
+        agencyRefreshBtn.classList.remove('is-reloading');
+      }
+    }
     return;
   }
   if (window.agencyElectron?.navigate) {
