@@ -13,6 +13,14 @@ const profileConnectingIds = new Set();
 const AGENCY_PANEL_KEY = 'agencyos_active_panel';
 const AGENCY_ACCOUNT_TAB_KEY = 'agencyos_account_tab';
 const REMEMBER_ACCESS_KEY = 'agencyos_remember_access';
+const AGENCY_DESKTOP_CLIENT = Boolean(window.agencyElectron) || /Electron/i.test(navigator.userAgent || '');
+const EMBEDDED_INDEX_PARAMS = new URLSearchParams(window.location.search);
+if (window.self !== window.top && EMBEDDED_INDEX_PARAMS.get('embedded') === '1') {
+  const redirect = new URL('workspace.html', window.location.href);
+  redirect.search = window.location.search || '?embedded=1';
+  window.location.replace(redirect.href);
+  throw new Error('AgencyOS shell redirected embedded frame to Workspace');
+}
 const savedAgencyAccountTab = localStorage.getItem(AGENCY_ACCOUNT_TAB_KEY);
 let agencyAccountTab = ['ladies', 'operators', 'salary', 'agency-admin'].includes(savedAgencyAccountTab) ? savedAgencyAccountTab : 'ladies';
 const resolvingProfiles = new Set();
@@ -35,12 +43,12 @@ let ladyDisconnectInProgress = false;
 let profileChoiceConnecting = false;
 let profileSwitchInProgress = false;
 let profileSwitchClearTimer = null;
-const AGENCY_DESKTOP_CLIENT = Boolean(window.agencyElectron) || /Electron/i.test(navigator.userAgent || '');
 document.body.classList.toggle('agency-desktop-app', AGENCY_DESKTOP_CLIENT);
 document.body.classList.toggle('agency-web-client', !AGENCY_DESKTOP_CLIENT);
 if (!ladyConnected && !['stats', 'adminPanel', 'settings'].includes(currentView)) {
-  currentView = 'workspace';
-  localStorage.setItem('dream_crm_view', 'workspace');
+  currentView = 'mandarinHome';
+  localStorage.setItem('dream_crm_view', 'mandarinHome');
+  localStorage.setItem(AGENCY_PANEL_KEY, 'home');
 }
 let autoOnlineRefreshProfileId = '';
 let autoOnlineRefreshTimer = null;
@@ -1564,12 +1572,11 @@ agencyInboxFrame?.addEventListener('load', clearProfileSwitchOverlayOnFrameLoad)
 function reloadWorkspaceEmbed(reason = 'refresh') {
   [workspaceEmbedFrame, agencyInboxFrame].forEach(frame => {
     if (!frame) return;
-    const currentSrc = frame.getAttribute('src') || 'workspace.html?embedded=1';
-    const url = new URL(currentSrc, window.location.href);
+    const url = new URL('workspace.html', window.location.href);
     url.searchParams.set('embedded', '1');
     url.searchParams.set('autoloadInbox', reason === 'connect' ? '1' : '0');
     url.searchParams.set('v', `20260625-agency-inbox-${reason}-${Date.now()}`);
-    frame.src = `${url.pathname.split('/').pop()}?${url.searchParams.toString()}`;
+    frame.src = `workspace.html?${url.searchParams.toString()}`;
   });
 }
 
@@ -2083,8 +2090,9 @@ function updateLadyConnectionButton() {
   document.body.classList.toggle('lady-disconnected', !ladyConnected);
   ladyConnectionGate?.classList.add('hidden');
   if (!ladyConnected) {
-    currentView = 'workspace';
-    localStorage.setItem('dream_crm_view', 'workspace');
+    currentView = 'mandarinHome';
+    localStorage.setItem('dream_crm_view', 'mandarinHome');
+    localStorage.setItem(AGENCY_PANEL_KEY, 'home');
     allMen = [];
     chatFavoriteMen = [];
     clearMainVirtualState();
@@ -2416,8 +2424,7 @@ async function disconnectCurrentLady(reason = 'off') {
       syncAgencyFavoritesAccess();
       activateAgencyPanel('home', { persist: false });
     } else {
-      await switchView('workspace');
-      showProfileChoice();
+      showMandarinHome({ resetPanel: true });
     }
   } finally {
     updateLadyConnectionButton();
@@ -2431,9 +2438,10 @@ function clearDisconnectedLady(disconnectedProfileId, reason = 'off') {
   }
   ladyConnected = false;
   activeProfileId = '';
-  currentView = 'workspace';
+  currentView = 'mandarinHome';
   localStorage.removeItem('dream_crm_profile_id');
-  localStorage.setItem('dream_crm_view', 'workspace');
+  localStorage.setItem('dream_crm_view', 'mandarinHome');
+  localStorage.setItem(AGENCY_PANEL_KEY, 'home');
   if (profileSelect) profileSelect.value = '';
   allMen = [];
   chatFavoriteMen = [];
@@ -7260,7 +7268,11 @@ function showMandarinHome(options = {}) {
     localStorage.setItem(AGENCY_PANEL_KEY, 'home');
     activateAgencyPanel('home', { persist: false });
   } else {
-    const restoredPanel = normalizeAgencyPanel(localStorage.getItem(AGENCY_PANEL_KEY) || 'home');
+    let restoredPanel = normalizeAgencyPanel(localStorage.getItem(AGENCY_PANEL_KEY) || 'home');
+    if (isProfileWorkView(restoredPanel) && !isActiveProfileOnline()) {
+      restoredPanel = 'home';
+      localStorage.setItem(AGENCY_PANEL_KEY, 'home');
+    }
     activateAgencyPanel(restoredPanel, { persist: false });
   }
   if (isAgencyWebsite()) {
@@ -8421,8 +8433,9 @@ async function closeAdminPanelWindow() {
     adminPanelView?.classList.add('hidden');
     if (adminPanelView) adminPanelView.style.display = 'none';
     document.body.classList.remove('admin-panel-view-active');
-    currentView = 'workspace';
-    localStorage.setItem('dream_crm_view', 'workspace');
+    currentView = 'mandarinHome';
+    localStorage.setItem('dream_crm_view', 'mandarinHome');
+    localStorage.setItem(AGENCY_PANEL_KEY, 'home');
     syncAdminPanelRoute(false);
     await showMentorAdminPanelChoice();
     return;
@@ -8431,13 +8444,14 @@ async function closeAdminPanelWindow() {
     adminPanelView?.classList.add('hidden');
     if (adminPanelView) adminPanelView.style.display = 'none';
     document.body.classList.remove('admin-panel-view-active');
-    currentView = 'workspace';
-    localStorage.setItem('dream_crm_view', 'workspace');
+    currentView = 'mandarinHome';
+    localStorage.setItem('dream_crm_view', 'mandarinHome');
+    localStorage.setItem(AGENCY_PANEL_KEY, 'home');
     syncAdminPanelRoute(false);
-    showProfileChoice();
+    showMandarinHome({ resetPanel: true });
     return;
   }
-  await switchView('workspace');
+  showMandarinHome({ resetPanel: true });
 }
 
 async function selectWorkingProfile(profileId) {
@@ -8455,8 +8469,9 @@ async function selectWorkingProfile(profileId) {
   profileSelect.value = activeProfileId;
   localStorage.setItem('dream_crm_profile_id', activeProfileId);
   if (!pendingAgencyProfileChoicePanel) {
-    currentView = 'workspace';
-    localStorage.setItem('dream_crm_view', 'workspace');
+    currentView = 'mandarinHome';
+    localStorage.setItem('dream_crm_view', 'mandarinHome');
+    localStorage.setItem(AGENCY_PANEL_KEY, 'home');
   }
   document.body.classList.remove('profile-choice-auth', 'agency-profile-choice-modal');
   profileChoiceScreen.classList.add('hidden');
@@ -8504,21 +8519,11 @@ async function connectSelectedLady() {
         : 'Server connected'
     });
     updateLadyConnectionButton();
-    const agencyReturnPanel = pendingAgencyProfileChoicePanel;
     pendingAgencyProfileChoicePanel = '';
-    if (agencyReturnPanel) {
-      showMandarinHome();
-      activateAgencyPanel(agencyReturnPanel, {
-        reloadInbox: agencyReturnPanel === 'inbox',
-        reloadFavorites: agencyReturnPanel === 'favorites'
-      });
-      return true;
-    }
-    currentView = 'workspace';
-    localStorage.setItem('dream_crm_view', 'workspace');
-    reloadWorkspaceEmbed('connect');
-    await loadMen(false);
-    await switchView('workspace');
+    currentView = 'mandarinHome';
+    localStorage.setItem('dream_crm_view', 'mandarinHome');
+    localStorage.setItem(AGENCY_PANEL_KEY, 'home');
+    showMandarinHome({ resetPanel: true });
     return true;
   } catch (error) {
     const failedProfileId = activeProfileId;

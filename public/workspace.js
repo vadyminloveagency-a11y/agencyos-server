@@ -3573,6 +3573,11 @@ async function loadWorkspace() {
     const session = await apiFetch('/api/auth/me');
     workspaceProfiles = session.profiles || [];
     if (!activeProfileId) {
+      if (workspaceEmbedded) {
+        window.parent?.postMessage({ source: 'dream-workspace', type: 'OPEN_AGENCY_HOME' }, '*');
+        renderDisconnectedWorkspace();
+        return;
+      }
       window.location.href = 'index.html';
       return;
     }
@@ -3604,6 +3609,11 @@ async function loadWorkspace() {
     }, 900);
   } catch (error) {
     if (error.message.includes('Unauthorized') || error.message.includes('Access')) {
+      if (workspaceEmbedded) {
+        window.parent?.postMessage({ source: 'dream-workspace', type: 'OPEN_AGENCY_HOME' }, '*');
+        renderDisconnectedWorkspace();
+        return;
+      }
       window.location.href = 'index.html';
       return;
     }
