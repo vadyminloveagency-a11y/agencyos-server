@@ -440,6 +440,38 @@ function writeDb(db) {
   if (!dbWriteTimer) dbWriteTimer = setTimeout(flushQueuedDb, 150);
 }
 
+async function writeDbNow(db) {
+  dbCache = db;
+  dbDirty = false;
+  if (dbWriteTimer) {
+    clearTimeout(dbWriteTimer);
+    dbWriteTimer = null;
+  }
+  const snapshot = dbCache;
+  dbWriteInFlight = dbWriteInFlight.then(async () => {
+    if (USE_POSTGRES) {
+      const pool = await connectPostgres();
+      await pool.query(
+        `insert into agencyos_documents (key, data, updated_at)
+         values ($1, $2::jsonb, now())
+         on conflict (key) do update set data = excluded.data, updated_at = now()`,
+        [POSTGRES_DOCUMENT_KEY, JSON.stringify(snapshot)]
+      );
+    } else {
+      await fs.promises.mkdir(path.dirname(DB_PATH), { recursive: true });
+      const tempPath = `${DB_PATH}.tmp`;
+      await fs.promises.writeFile(tempPath, JSON.stringify(snapshot, null, 2), 'utf8');
+      await fs.promises.rename(tempPath, DB_PATH);
+      dbCacheMtimeMs = dbFileMtimeMs();
+    }
+  }).catch(error => {
+    dbDirty = true;
+    console.error(`Could not save database to ${USE_POSTGRES ? 'PostgreSQL' : 'file'}:`, error);
+    throw error;
+  });
+  await dbWriteInFlight;
+}
+
 function flushDbBeforeExit() {
   if (!dbCache || !dbDirty) return;
   if (USE_POSTGRES) {
@@ -4871,7 +4903,7 @@ app.get('/api/auth/status', (req, res) => {
   res.json({ ok: true, needsSetup: !Object.values(db.users || {}).some(user => user.role === 'director') });
 });
 
-app.post('/api/auth/setup', (req, res) => {
+app.post('/api/auth/setup', async (req, res) => {
   const db = readDb();
   if (Object.values(db.users || {}).some(user => user.role === 'director')) {
     return res.status(409).json({ ok: false, error: 'Administrator already exists' });
@@ -4895,11 +4927,11 @@ app.post('/api/auth/setup', (req, res) => {
     adminStartedAt: createdAt
   };
   createSession(res, db, id);
-  writeDb(db);
+  await writeDbNow(db);
   res.json({ ok: true, user: publicUser(db.users[id]), profiles: profilesForUser(db, db.users[id]) });
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const db = readDb();
   const username = String(req.body?.username || '').trim().toLowerCase();
   const clientType = String(req.body?.clientType || 'web').trim().toLowerCase();
@@ -4911,15 +4943,15 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(403).json({ ok: false, error: 'Operators can sign in only from the desktop app' });
   }
   createSession(res, db, user.id);
-  writeDb(db);
+  await writeDbNow(db);
   res.json({ ok: true, user: publicUser(user), profiles: profilesForUser(db, user) });
 });
 
-app.post('/api/auth/logout', (req, res) => {
+app.post('/api/auth/logout', async (req, res) => {
   const db = readDb();
   const token = parseCookies(req).crm_session;
   if (token) delete db.sessions[crypto.createHash('sha256').update(token).digest('hex')];
-  writeDb(db);
+  await writeDbNow(db);
   res.setHeader('Set-Cookie', 'crm_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
   res.json({ ok: true });
 });
