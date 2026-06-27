@@ -2060,7 +2060,7 @@ function ensureSidebarProfileDock() {
 function renderSidebarProfileDock() {
   const dock = ensureSidebarProfileDock();
   if (!dock) return;
-  if (isWebsiteAdminSession()) {
+  if (isAgencyWebsite()) {
     dock.innerHTML = '';
     dock.classList.add('hidden');
     return;
@@ -2110,21 +2110,21 @@ function isActiveProfileOnline() {
 function syncAgencyNavLocks() {
   const profileReady = isActiveProfileOnline();
   mandarinHomeScreen?.querySelectorAll('.agency-shell-nav-item[data-agency-view]').forEach(item => {
-    const hiddenForWebsiteAdmin = isWebsiteAdminSession() && isProfileWorkView(item.dataset.agencyView);
-    const locked = hiddenForWebsiteAdmin || (isProfileWorkView(item.dataset.agencyView) && !profileReady);
+    const hiddenForWebsite = isAgencyWebsite() && isProfileWorkView(item.dataset.agencyView);
+    const locked = hiddenForWebsite || (isProfileWorkView(item.dataset.agencyView) && !profileReady);
     item.classList.toggle('is-profile-hidden', locked);
     item.classList.toggle('is-profile-locked', locked);
     item.disabled = locked;
     if (locked) {
       item.setAttribute('aria-disabled', 'true');
-      item.setAttribute('title', 'First connect a profile below');
+      item.setAttribute('title', hiddenForWebsite ? 'Available in desktop app' : 'First connect a profile below');
     } else {
       item.removeAttribute('aria-disabled');
       item.removeAttribute('title');
     }
   });
   const currentPanel = normalizeAgencyPanel(localStorage.getItem(AGENCY_PANEL_KEY) || 'home');
-  if (!profileReady && isProfileWorkView(currentPanel)) {
+  if ((isAgencyWebsite() || !profileReady) && isProfileWorkView(currentPanel)) {
     activateAgencyPanel('home', { persist: false });
   }
 }

@@ -23844,6 +23844,12 @@ body.web-admin-user .agency-shell-working-lady {
   display: none !important;
 }
 
+body.agency-web-client #sidebarProfileDock,
+body.agency-web-client .agency-shell-working-lady,
+body.agency-web-client .agency-shell-nav-item[data-director-hidden="true"] {
+  display: none !important;
+}
+
 body.agency-desktop-app .agency-shell-nav-item[data-agency-view="account-manager"],
 body.agency-desktop-app .agency-account-manager[data-agency-panel="account-manager"] {
   display: none !important;
