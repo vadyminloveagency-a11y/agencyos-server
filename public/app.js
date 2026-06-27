@@ -2109,9 +2109,12 @@ function updateLadyConnectionButton() {
   document.body.classList.toggle('lady-disconnected', !ladyConnected);
   ladyConnectionGate?.classList.add('hidden');
   if (!ladyConnected) {
-    currentView = 'mandarinHome';
-    localStorage.setItem('dream_crm_view', 'mandarinHome');
-    localStorage.setItem(AGENCY_PANEL_KEY, 'home');
+    const currentPanel = normalizeAgencyPanel(localStorage.getItem(AGENCY_PANEL_KEY) || 'dashboard');
+    if (isProfileWorkView(currentPanel)) {
+      currentView = 'mandarinHome';
+      localStorage.setItem('dream_crm_view', 'mandarinHome');
+      localStorage.setItem(AGENCY_PANEL_KEY, 'home');
+    }
     allMen = [];
     chatFavoriteMen = [];
     clearMainVirtualState();
@@ -7295,7 +7298,7 @@ function showMandarinHome(options = {}) {
     localStorage.setItem(AGENCY_PANEL_KEY, 'home');
     activateAgencyPanel('home', { persist: false });
   } else {
-    let restoredPanel = normalizeAgencyPanel(localStorage.getItem(AGENCY_PANEL_KEY) || 'home');
+    let restoredPanel = normalizeAgencyPanel(localStorage.getItem(AGENCY_PANEL_KEY) || 'dashboard');
     if (isProfileWorkView(restoredPanel) && !isActiveProfileOnline()) {
       restoredPanel = 'home';
       localStorage.setItem(AGENCY_PANEL_KEY, 'home');

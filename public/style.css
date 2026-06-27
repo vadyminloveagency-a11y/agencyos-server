@@ -23862,7 +23862,7 @@ body.mandarin-home-active .agency-reload-overlay {
   place-items: center;
   align-content: center;
   gap: 28px;
-  background: #fbfaf9;
+  background: #151311;
   color: #171412;
   font-size: 16px;
   font-weight: 800;
@@ -23891,8 +23891,14 @@ body.mandarin-home-active .agency-reload-spinner {
 }
 
 body.mandarin-home-active:not(.app-dark-theme) .agency-reload-overlay {
-  background: #fbfaf9;
+  background: #f7f1ed;
   color: #241f1b;
+}
+
+body.mandarin-home-active.agency-dashboard-active .agency-reload-overlay,
+body.mandarin-home-active.app-dark-theme .agency-reload-overlay {
+  background: #151311;
+  color: #f5eee9;
 }
 
 body.agency-desktop-app .agency-shell-nav-item[data-agency-view="account-manager"],
