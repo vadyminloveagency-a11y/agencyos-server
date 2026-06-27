@@ -3683,17 +3683,22 @@ function workspaceKnownLetterKeysForId(id) {
 
 async function scanAndSaveInbox(rows = workspaceSyncRows(), options = {}) {
   const full = options.full === true;
+  const exactPage = Math.max(0, Number(options.page || 0) || 0);
   const syncRows = full
     ? WORKSPACE_FULL_SYNC_PAGES
     : Math.min(WORKSPACE_FULL_SYNC_PAGES, Math.max(1, Number(rows) || WORKSPACE_SYNC_ROWS_DEFAULT));
-  setWorkspaceActionStatus(`Opening Dream inbox and scanning ${syncRows} page${syncRows === 1 ? '' : 's'}`);
+  setWorkspaceActionStatus(exactPage
+    ? `Scanning Dream inbox page ${exactPage}`
+    : `Opening Dream inbox and scanning ${syncRows} page${syncRows === 1 ? '' : 's'}`);
   const response = await apiFetch('/api/workspace/scan-inbox', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     timeoutMs: Math.max(90000, syncRows * 30000),
     body: JSON.stringify({
       sourceProfileId: activeProfileId,
-      maxPages: syncRows
+      maxPages: syncRows,
+      page: exactPage,
+      syncFavorites: options.syncFavorites !== false
     })
   });
   workspaceLetters = response.letters || workspaceLetters;
@@ -3701,7 +3706,42 @@ async function scanAndSaveInbox(rows = workspaceSyncRows(), options = {}) {
     ? ` Favorites checked: ${response.favorites.favorites || 0}.`
     : '';
   setWorkspaceActionStatus(`Men list saved from inbox: ${response.imported || 0} rows.${favoriteText}`);
-  return { letters: workspaceLetters, scannedLetters: response.letters || [] };
+  return {
+    letters: workspaceLetters,
+    scannedLetters: response.letters || [],
+    imported: response.imported || 0,
+    lastPage: Math.max(1, Number(response.lastPage || exactPage || 1) || 1)
+  };
+}
+
+async function scanInboxInBatches(batchSize = WORKSPACE_INBOX_SYNC_PAGES) {
+  const size = Math.min(WORKSPACE_FULL_SYNC_PAGES, Math.max(1, Number(batchSize) || WORKSPACE_INBOX_SYNC_PAGES));
+  setWorkspaceActionStatus(`Step 1/4: scanning inbox pages 1-${size}`);
+  const first = await scanAndSaveInbox(size, { mergeOnly: true, limitLetters: false, syncFavorites: false });
+  let lastPage = Math.max(size, Number(first.lastPage || size) || size);
+  await reloadWorkspaceInbox();
+  renderCurrentWorkspaceState();
+  if (lastPage <= size) return first;
+
+  let imported = first.imported || 0;
+  for (let start = size + 1; start <= lastPage; start += size) {
+    const end = Math.min(lastPage, start + size - 1);
+    setWorkspaceActionStatus(`Step 1/4: scanning inbox pages ${start}-${end} of ${lastPage}`);
+    for (let page = start; page <= end; page += 1) {
+      const result = await scanAndSaveInbox(1, {
+        page,
+        mergeOnly: true,
+        limitLetters: false,
+        syncFavorites: false
+      });
+      imported += result.imported || 0;
+      lastPage = Math.max(lastPage, Number(result.lastPage || lastPage) || lastPage);
+    }
+    await reloadWorkspaceInbox();
+    renderCurrentWorkspaceState();
+  }
+  setWorkspaceActionStatus(`Inbox scan done: ${imported} rows updated.`);
+  return { imported, lastPage, letters: workspaceLetters };
 }
 
 async function reloadWorkspaceInbox() {
@@ -3898,8 +3938,7 @@ async function syncAllWorkspace(button = refreshBtn) {
   if (rowsUpdateBtn && rowsUpdateBtn !== button) rowsUpdateBtn.disabled = true;
   if (syncRowsInput) syncRowsInput.disabled = true;
   try {
-    setWorkspaceActionStatus('Step 1/4: opening Dream inbox');
-    await scanAndSaveInbox(WORKSPACE_INBOX_SYNC_PAGES, { mergeOnly: true, limitLetters: false });
+    await scanInboxInBatches(WORKSPACE_INBOX_SYNC_PAGES);
     setWorkspaceActionStatus('Step 3/4: loading saved men list');
     await reloadWorkspaceInbox();
     setWorkspaceActionStatus('Step 4/4: refreshing AgencyOS list');

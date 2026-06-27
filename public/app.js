@@ -2224,17 +2224,23 @@ async function connectProfileById(profileId, options = {}) {
     const result = await serverProfileRequestFor(id, 'server-connect', {
       body: { syncInbox: options.syncInbox !== false, maxPages: options.maxPages || 3 }
     });
-    if (window.agencyElectron?.prepareDreamProfile) {
-      window.agencyElectron.prepareDreamProfile(id).catch(error => {
-        console.warn('Could not prepare Electron Dream profile:', error);
-      });
-    }
+    await prepareLocalDreamProfile(id);
     localStorage.setItem(`dream_team_lady_connected_${id}`, '1');
     return result;
   } finally {
     profileConnectingIds.delete(id);
     renderSidebarProfileDock();
   }
+}
+
+async function prepareLocalDreamProfile(profileId) {
+  const id = String(profileId || '');
+  if (!window.agencyElectron?.prepareDreamProfile) return true;
+  const result = await window.agencyElectron.prepareDreamProfile(id);
+  if (result?.ok === false) {
+    throw new Error(result.error || 'Could not login this profile in Dream on this PC');
+  }
+  return true;
 }
 
 async function switchWorkingProfile(profileId, options = {}) {
@@ -8517,11 +8523,7 @@ async function connectSelectedLady() {
     const result = await serverProfileRequest('server-connect', {
       body: { syncInbox: true, maxPages: 3 }
     });
-    if (window.agencyElectron?.prepareDreamProfile) {
-      window.agencyElectron.prepareDreamProfile(activeProfileId).catch(error => {
-        console.warn('Could not prepare Electron Dream profile:', error);
-      });
-    }
+    await prepareLocalDreamProfile(activeProfileId);
     ladyConnected = true;
     localStorage.setItem(`dream_team_lady_connected_${activeProfileId}`, '1');
     showExtensionStatus({
