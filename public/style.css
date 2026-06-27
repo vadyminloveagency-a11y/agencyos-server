@@ -23850,6 +23850,52 @@ body.agency-web-client .agency-shell-nav-item[data-director-hidden="true"] {
   display: none !important;
 }
 
+body.mandarin-home-active .agency-shell-main {
+  position: relative !important;
+}
+
+body.mandarin-home-active.agency-profile-switching .agency-shell-main::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  background: rgba(21, 19, 17, 0.82);
+  backdrop-filter: blur(2px);
+  pointer-events: all;
+}
+
+body.mandarin-home-active.agency-profile-switching .agency-shell-main::after {
+  content: attr(data-profile-switch-title) "\A" attr(data-profile-switch-name);
+  white-space: pre;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 81;
+  transform: translate(-50%, -50%);
+  min-width: 240px;
+  padding: 22px 28px;
+  border: 1px solid #3a312a;
+  border-radius: 10px;
+  background: #1b1816;
+  color: #f5eee9;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.32);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.55;
+  text-align: center;
+}
+
+body.mandarin-home-active:not(.app-dark-theme).agency-profile-switching .agency-shell-main::before {
+  background: rgba(247, 241, 237, 0.82);
+}
+
+body.mandarin-home-active:not(.app-dark-theme).agency-profile-switching .agency-shell-main::after {
+  border-color: #eadbd4;
+  background: #fffdfb;
+  color: #241f1b;
+  box-shadow: 0 24px 70px rgba(48, 34, 26, 0.16);
+}
+
 body.agency-desktop-app .agency-shell-nav-item[data-agency-view="account-manager"],
 body.agency-desktop-app .agency-account-manager[data-agency-panel="account-manager"] {
   display: none !important;
