@@ -1417,6 +1417,7 @@ const accessStatus = document.getElementById('accessStatus');
 const rememberAccessRow = document.getElementById('rememberAccessRow');
 const rememberAccessInput = document.getElementById('rememberAccessInput');
 const mandarinHomeScreen = document.getElementById('mandarinHomeScreen');
+const legacyAppLayout = document.querySelector('.app-layout');
 const agencyShellUserName = document.getElementById('agencyShellUserName');
 const agencyShellUserRole = document.getElementById('agencyShellUserRole');
 const agencyShellAvatar = document.getElementById('agencyShellAvatar');
@@ -1543,6 +1544,20 @@ const adminClose = document.getElementById('adminClose');
 const adminSignOutBtn = document.getElementById('adminSignOutBtn');
 const openAddProfileModalBtn = document.getElementById('openAddProfileModalBtn');
 const addProfileModal = document.getElementById('addProfileModal');
+
+function setLegacyAppLayoutHidden(hidden) {
+  if (!legacyAppLayout) return;
+  legacyAppLayout.classList.toggle('hidden', Boolean(hidden));
+  legacyAppLayout.style.display = hidden ? 'none' : '';
+  legacyAppLayout.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+}
+
+function setMandarinHomeVisible(visible) {
+  document.body.classList.toggle('mandarin-home-active', Boolean(visible));
+  setLegacyAppLayoutHidden(visible);
+  mandarinHomeScreen?.classList.toggle('hidden', !visible);
+  mandarinHomeScreen?.setAttribute('aria-hidden', visible ? 'false' : 'true');
+}
 workspaceEmbedFrame?.addEventListener('load', clearProfileSwitchOverlayOnFrameLoad);
 agencyInboxFrame?.addEventListener('load', clearProfileSwitchOverlayOnFrameLoad);
 
@@ -7079,10 +7094,8 @@ function mountAgencyFavoritesView() {
 function activateAgencyPanel(view, options = {}) {
   const panelView = normalizeAgencyPanel(view);
   const persist = options.persist !== false;
-  document.body.classList.add('auth-ready', 'mandarin-home-active');
-  mandarinHomeScreen?.classList.remove('hidden');
-  mandarinHomeScreen?.setAttribute('aria-hidden', 'false');
-  document.querySelector('.app-layout')?.classList.add('hidden');
+  document.body.classList.add('auth-ready');
+  setMandarinHomeVisible(true);
   if (workspaceView) {
     workspaceView.classList.add('hidden');
     workspaceView.style.display = 'none';
@@ -7166,7 +7179,7 @@ function showLogin(needsSetup = false) {
   setupMode = needsSetup;
   document.body.classList.remove('auth-pending', 'auth-ready', 'profile-choice-auth', 'agency-profile-choice-modal', 'mandarin-home-active');
   document.body.classList.add('auth-login');
-  mandarinHomeScreen?.classList.add('hidden');
+  setMandarinHomeVisible(false);
   profileChoiceScreen?.classList.add('hidden');
   adminModal?.classList.add('hidden');
   accessTitle.textContent = needsSetup ? 'Create your administrator account' : 'AgencyOS';
@@ -7199,6 +7212,7 @@ function showMandarinHome(options = {}) {
     'settings-view-active'
   );
   document.body.classList.add('auth-ready', 'mandarin-home-active');
+  setMandarinHomeVisible(true);
   document.body.classList.toggle('agency-shell-collapsed', localStorage.getItem('agency_shell_collapsed') === '1');
   syncAgencyProfilePowerToggle();
   if (agencyShellCollapse) agencyShellCollapse.textContent = document.body.classList.contains('agency-shell-collapsed') ? '›' : '‹';
@@ -7225,7 +7239,6 @@ function showMandarinHome(options = {}) {
           : 'Operator';
   }
   agencySalarySettingsBtn?.classList.toggle('hidden', currentUser?.role !== 'director');
-  mandarinHomeScreen?.classList.remove('hidden');
   currentView = 'mandarinHome';
   localStorage.setItem('dream_crm_view', 'mandarinHome');
   renderSidebarProfileDock();
@@ -8271,10 +8284,11 @@ function showProfileChoice() {
       'settings-view-active'
     );
     document.body.classList.add('auth-ready', 'mandarin-home-active', 'agency-profile-choice-modal');
+    setMandarinHomeVisible(true);
+    document.body.classList.add('agency-profile-choice-modal');
     accessScreen?.classList.add('hidden');
     adminModal?.classList.add('hidden');
     ladyConnectingScreen?.classList.add('hidden');
-    mandarinHomeScreen?.classList.remove('hidden');
     const title = profileChoiceScreen?.querySelector('h2');
     const hint = profileChoiceScreen?.querySelector('p');
     if (title) title.textContent = 'Choose a profile';
@@ -8303,8 +8317,8 @@ function showProfileChoice() {
     'settings-view-active'
   );
   document.body.classList.add('profile-choice-auth');
+  setMandarinHomeVisible(false);
   accessScreen?.classList.add('hidden');
-  mandarinHomeScreen?.classList.add('hidden');
   adminModal?.classList.add('hidden');
   ladyConnectingScreen?.classList.add('hidden');
   const title = profileChoiceScreen?.querySelector('h2');
