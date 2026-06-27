@@ -3497,7 +3497,20 @@ function autoSyncSelectedManFromList() {
 async function apiFetch(url, options = {}) {
   const headers = new Headers(options.headers || {});
   if (activeProfileId) headers.set('X-Profile-ID', activeProfileId);
-  const response = await fetch(url, { ...options, headers });
+  const timeoutMs = Math.max(0, Number(options.timeoutMs || 0) || 0);
+  const controller = timeoutMs ? new AbortController() : null;
+  const timer = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
+  let response;
+  try {
+    response = await fetch(url, { ...options, headers, signal: controller?.signal || options.signal });
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Dream inbox scan timed out. Try Update again or relogin this profile.');
+    }
+    throw error;
+  } finally {
+    if (timer) window.clearTimeout(timer);
+  }
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || 'Request failed');
   return result;
@@ -3677,6 +3690,7 @@ async function scanAndSaveInbox(rows = workspaceSyncRows(), options = {}) {
   const response = await apiFetch('/api/workspace/scan-inbox', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    timeoutMs: Math.max(90000, syncRows * 30000),
     body: JSON.stringify({
       sourceProfileId: activeProfileId,
       maxPages: syncRows

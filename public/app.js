@@ -1933,15 +1933,27 @@ async function serverProfileRequestFor(profileId, action, options = {}) {
   if (!id) throw new Error('No profile selected');
   const headers = new Headers({ 'Content-Type': 'application/json', ...(options.headers || {}) });
   headers.set('X-Profile-ID', id);
-  const response = await fetch(`/api/profiles/${encodeURIComponent(id)}/${action}`, {
-    method: options.method || 'POST',
-    headers,
-    body: options.body === undefined ? '{}' : JSON.stringify(options.body)
-  }).catch(error => {
+  const timeoutMs = Math.max(0, Number(options.timeoutMs || 0) || 0);
+  const controller = timeoutMs ? new AbortController() : null;
+  const timer = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
+  let response;
+  try {
+    response = await fetch(`/api/profiles/${encodeURIComponent(id)}/${action}`, {
+      method: options.method || 'POST',
+      headers,
+      body: options.body === undefined ? '{}' : JSON.stringify(options.body),
+      signal: controller?.signal || options.signal
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Dream request timed out. Try again or relogin this profile.');
+    }
     throw new Error(error?.message === 'Failed to fetch'
       ? 'CRM server is not responding. Restart the local server and try again.'
       : (error?.message || 'Network request failed'));
-  });
+  } finally {
+    if (timer) window.clearTimeout(timer);
+  }
   const result = await response.json().catch(() => ({}));
   if (!response.ok || result.ok === false) throw new Error(result.error || 'Server Dream Singles request failed');
   return result;
@@ -5678,6 +5690,7 @@ async function startSync(mode) {
       : 'Update Today: opening Dream inbox and scanning 3 pages');
     showExtensionStatus({ phase: 'server-sync', ready: true, message: 'Server is reading Dream Singles inbox...' });
     const result = await serverProfileRequest('server-sync-inbox', {
+      timeoutMs: mode === 'full' ? 240000 : 120000,
       body: {
         maxPages: mode === 'full'
           ? Number(pageLimit?.value || 10)
