@@ -1580,11 +1580,19 @@ workspaceEmbedFrame?.addEventListener('load', clearProfileSwitchOverlayOnFrameLo
 agencyInboxFrame?.addEventListener('load', clearProfileSwitchOverlayOnFrameLoad);
 
 function reloadWorkspaceEmbed(reason = 'refresh') {
+  const shouldAutoloadInbox = [
+    'connect',
+    'sidebar-profile',
+    'sidebar-profile-power',
+    'profile-select',
+    'connect-all',
+    'agency-inbox'
+  ].includes(String(reason || ''));
   [workspaceEmbedFrame, agencyInboxFrame].forEach(frame => {
     if (!frame) return;
     const url = new URL('workspace.html', window.location.href);
     url.searchParams.set('embedded', '1');
-    url.searchParams.set('autoloadInbox', reason === 'connect' ? '1' : '0');
+    url.searchParams.set('autoloadInbox', shouldAutoloadInbox ? '1' : '0');
     url.searchParams.set('v', `20260625-agency-inbox-${reason}-${Date.now()}`);
     frame.src = `workspace.html?${url.searchParams.toString()}`;
   });

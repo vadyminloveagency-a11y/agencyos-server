@@ -3740,10 +3740,22 @@ function collectWorkspaceLetterHtml(html = '', sourceUrl = DREAM_INBOX_URL, fall
     ...extractElementsByClassName(html, 'media'),
     ...extractElementsByClassName(html, 'gallery')
   ].filter(Boolean).join('\n');
+  const attachmentCandidateHtml = [
+    attachmentHtml,
+    mainHtml,
+    ...extractElementsByClassName(html, 'modal'),
+    ...extractElementsByClassName(html, 'popup'),
+    ...extractElementsByClassName(html, 'message-read'),
+    ...extractElementsByClassName(html, 'read-message')
+  ].filter(Boolean).join('\n');
   const addAttachment = (type, url, label = '') => {
     const cleanUrl = String(url || '').trim();
     if (!cleanUrl || seenAttachments.has(cleanUrl)) return;
-    if (!/(^|\.)dream-singles\.com\//i.test(cleanUrl) && !/profile-photos-cdn|dream-singles/i.test(cleanUrl)) return;
+    if (
+      !/(^|\.)dream-singles\.com\//i.test(cleanUrl) &&
+      !/profile-photos-cdn\.dream-singles\.com\//i.test(cleanUrl) &&
+      !/dream-marriage-attach\.s3\.amazonaws\.com\/msg\//i.test(cleanUrl)
+    ) return;
     seenAttachments.add(cleanUrl);
     attachments.push({ type, url: cleanUrl, label: cleanWorkspaceText(label || '') });
   };
@@ -3753,11 +3765,16 @@ function collectWorkspaceLetterHtml(html = '', sourceUrl = DREAM_INBOX_URL, fall
     if (/\.(?:jpe?g|png|webp|gif|bmp|avif)(?:[?#]|$)|\/(?:photo|image|gallery)\b/i.test(source)) return 'image';
     return '';
   };
-  for (const img of attachmentHtml.matchAll(/<img\b[^>]*>/gi)) {
-    const src = absoluteDreamUrl(attrFromTag(img[0], 'src') || attrFromTag(img[0], 'data-src'), sourceUrl);
-    if (src && !/logo|banner|sprite|icon|captcha|avatar|emoji|smil|emoticon/i.test(src)) addAttachment('image', src);
+  for (const img of attachmentCandidateHtml.matchAll(/<img\b[^>]*>/gi)) {
+    const tag = img[0] || '';
+    const context = attachmentCandidateHtml.slice(Math.max(0, img.index - 700), Math.min(attachmentCandidateHtml.length, img.index + 1200));
+    const src = absoluteDreamUrl(attrFromTag(tag, 'src') || attrFromTag(tag, 'data-src'), sourceUrl);
+    if (!src) continue;
+    if (/logo|banner|sprite|icon|captcha|avatar|emoji|smil|emoticon|profile-picture|profile-photo/i.test(`${tag} ${src}`)) continue;
+    if (!/(?:attach|paperclip|photo|image|gallery|media|message|letter|modal|download|view|open)/i.test(context)) continue;
+    addAttachment('image', src);
   }
-  for (const video of attachmentHtml.matchAll(/<video\b[^>]*>[\s\S]*?<\/video>|<video\b[^>]*>/gi)) {
+  for (const video of attachmentCandidateHtml.matchAll(/<video\b[^>]*>[\s\S]*?<\/video>|<video\b[^>]*>/gi)) {
     const block = video[0] || '';
     const src = absoluteDreamUrl(attrFromTag(block, 'src'), sourceUrl);
     const sourceSrc = absoluteDreamUrl(block.match(/<source\b[^>]*\bsrc=["']([^"']+)["']/i)?.[1] || '', sourceUrl);
@@ -3766,11 +3783,11 @@ function collectWorkspaceLetterHtml(html = '', sourceUrl = DREAM_INBOX_URL, fall
     if (sourceSrc) addAttachment('video', sourceSrc, 'Video');
     if (!src && !sourceSrc && poster) addAttachment('image', poster, 'Video preview');
   }
-  for (const anchor of attachmentHtml.matchAll(/<a\b[^>]*href=["'][^"']+\.(?:mp4|webm|mov|m4v|jpe?g|png|webp|gif)(?:[?#][^"']*)?["'][^>]*>/gi)) {
+  for (const anchor of attachmentCandidateHtml.matchAll(/<a\b[^>]*href=["'][^"']+\.(?:mp4|webm|mov|m4v|jpe?g|png|webp|gif)(?:[?#][^"']*)?["'][^>]*>/gi)) {
     const href = absoluteDreamUrl(attrFromTag(anchor[0], 'href'), sourceUrl);
     if (href) addAttachment(/\.(?:mp4|webm|mov|m4v)(?:[?#]|$)/i.test(href) ? 'video' : 'image', href);
   }
-  for (const tag of attachmentHtml.matchAll(/<(?:a|button|div|span)\b[^>]*>/gi)) {
+  for (const tag of attachmentCandidateHtml.matchAll(/<(?:a|button|div|span)\b[^>]*>/gi)) {
     const rawTag = tag[0] || '';
     const context = `${rawTag} ${htmlToText(rawTag)}`;
     for (const attr of ['href', 'data-href', 'data-url', 'data-src', 'data-video-url', 'data-file', 'src']) {
@@ -3779,6 +3796,22 @@ function collectWorkspaceLetterHtml(html = '', sourceUrl = DREAM_INBOX_URL, fall
       const type = attachmentTypeForUrl(url, context);
       if (type) addAttachment(type, url, type === 'video' ? 'Video' : 'Photo');
     }
+  }
+  for (const tagMatch of String(html || '').matchAll(/<(?:a|button|div|span|img)\b[^>]*(?:attach|paperclip|photo|image|video|media|gallery|fancybox|lightbox|download|preview|open)[^>]*>/gi)) {
+    const rawTag = tagMatch[0] || '';
+    const context = String(html || '').slice(Math.max(0, tagMatch.index - 700), Math.min(String(html || '').length, tagMatch.index + 1200));
+    for (const attr of ['href', 'data-href', 'data-url', 'data-src', 'data-video-url', 'data-file', 'src']) {
+      const url = absoluteDreamUrl(attrFromTag(rawTag, attr), sourceUrl);
+      if (!url) continue;
+      const type = attachmentTypeForUrl(url, `${rawTag} ${context}`) ||
+        (/(?:attach|paperclip|photo|image|gallery|download|preview|open)/i.test(`${rawTag} ${context}`) ? 'image' : '');
+      if (type) addAttachment(type, url, type === 'video' ? 'Video' : 'Photo');
+    }
+  }
+  for (const quoted of attachmentCandidateHtml.matchAll(/["']([^"']*(?:uploads?|media|gallery|attachment|photo|image|video|attach)[^"']*\.(?:jpe?g|png|webp|gif|mp4|webm|mov|m4v)(?:[?#][^"']*)?)["']/gi)) {
+    const url = absoluteDreamUrl(quoted[1], sourceUrl);
+    const type = attachmentTypeForUrl(url, quoted[0]);
+    if (type) addAttachment(type, url, type === 'video' ? 'Video' : 'Photo');
   }
 
   const replyUrl = findWorkspaceComposeUrl(html, sourceUrl) || deriveWorkspaceComposeUrlFromReadUrl(sourceUrl);

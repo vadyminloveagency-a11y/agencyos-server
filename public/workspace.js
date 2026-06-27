@@ -2068,17 +2068,30 @@ function canReplyToLetter(letter) {
 }
 
 function historyEntryReplyLetter(entry, group) {
-  if (!entry || entry.direction === 'outgoing' || !entry.historyUrl) return null;
+  if (!entry || entry.direction === 'outgoing') return null;
+  const messageLink = String(
+    entry.liveLetter?.replyUrl ||
+    entry.liveLetter?.messageLink ||
+    entry.historyUrl ||
+    (Array.isArray(entry.historyUrls) ? entry.historyUrls[0] : '') ||
+    ''
+  ).trim();
+  if (!messageLink) return null;
   return {
     key: `history-reply:${entry.key}`,
     id: group?.id || entry.senderId || '',
     name: group?.name || entry.author || '',
     direction: 'incoming',
-    messageLink: entry.liveLetter?.replyUrl || entry.liveLetter?.messageLink || entry.historyUrl,
+    messageLink,
     dateText: entry.dateText || '',
     bodyText: entry.liveLetter?.bodyText || entry.text || '',
-    conversation: entry.liveLetter?.conversation || [],
-    attachments: entry.liveLetter?.attachments || [],
+    conversation: entry.liveLetter?.conversation || (entry.text ? [{
+      direction: 'incoming',
+      author: entry.author || group?.name || '',
+      dateText: entry.dateText || '',
+      text: entry.text || ''
+    }] : []),
+    attachments: entry.liveLetter?.attachments || entry.mediaAttachments || [],
     transientHistoryReply: true
   };
 }
@@ -3046,6 +3059,7 @@ function renderAttachments(attachments = []) {
     .map(item => ({
       type: String(item?.type || '').toLowerCase(),
       url: String(item?.localUrl || item?.url || item?.src || '').trim(),
+      sourceUrl: String(item?.sourceUrl || '').trim(),
       label: String(item?.label || '').trim()
     }))
     .filter(item => item.url)
@@ -3076,9 +3090,12 @@ function renderAttachments(attachments = []) {
           const isVideo = item.kind === 'video';
           const label = item.label || (item.kind === 'video' ? 'Video' : (item.kind === 'photo' ? 'Photo' : 'File'));
           const directVideo = isVideo && /\.(?:mp4|webm|mov|m4v)(?:[?#]|$)/i.test(item.url);
+          const fallbackAttr = item.sourceUrl && item.sourceUrl !== item.url
+            ? ` data-fallback-src="${escapeAttr(item.sourceUrl)}"`
+            : '';
           return directVideo
             ? `<figure class="workspace-attachment-preview video">
-                <video src="${escapeAttr(item.url)}" controls preload="metadata"></video>
+                <video src="${escapeAttr(item.url)}"${fallbackAttr} controls preload="metadata"></video>
                 <figcaption>${escapeHtml(label)}</figcaption>
               </figure>`
             : isVideo
@@ -3087,7 +3104,7 @@ function renderAttachments(attachments = []) {
                   <figcaption>${escapeHtml(label)}</figcaption>
                 </figure>`
             : `<figure class="workspace-attachment-preview image">
-                <img src="${escapeAttr(item.url)}" alt="${escapeAttr(label)}" loading="lazy" decoding="async">
+                <img src="${escapeAttr(item.url)}"${fallbackAttr} alt="${escapeAttr(label)}" loading="lazy" decoding="async">
                 <figcaption>${escapeHtml(label)}</figcaption>
               </figure>`;
         }).join('')}
@@ -3192,7 +3209,6 @@ function renderDialog(group) {
     ? '<div class="workspace-message-loading error">Could not load letter text</div>'
     : '';
 
-  const isReadMode = workspaceListFilter === 'read';
   const hideLetterPanel = false;
   dialog.innerHTML = `
     <div class="workspace-reader ${hideLetterPanel ? 'read-mode' : ''}">
@@ -3219,13 +3235,13 @@ function renderDialog(group) {
   const replyLetter = selectedReplyLetterForGroup(group);
   const canReply = canReplyToLetter(replyLetter);
   const canLoadHistory = Boolean(canUseLetterForHistory(selectedLetter) ? selectedLetter : historyLetterCandidatesForGroup(group)[0]);
-  composer?.classList.toggle('hidden', isReadMode);
-  reply.disabled = isReadMode || !canReply;
-  if (historyBtn) historyBtn.disabled = isReadMode || !canLoadHistory;
-  photoBtn.disabled = isReadMode || !canReply;
-  videoBtn.disabled = isReadMode || !canReply;
-  if (replyTranslateBtn) replyTranslateBtn.disabled = isReadMode || !canReply || !reply.value.trim();
-  sendBtn.disabled = isReadMode || !canReply;
+  composer?.classList.remove('hidden');
+  reply.disabled = !canReply;
+  if (historyBtn) historyBtn.disabled = !canLoadHistory;
+  photoBtn.disabled = !canReply;
+  videoBtn.disabled = !canReply;
+  if (replyTranslateBtn) replyTranslateBtn.disabled = !canReply || !reply.value.trim();
+  sendBtn.disabled = !canReply;
   reply.placeholder = 'Enter your message';
   renderPendingReplyAttachments();
   resizeReplyBox();
@@ -3591,6 +3607,52 @@ async function openWorkspaceInbox(button = inboxFilterBtn, options = {}) {
   }
 }
 
+async function ensureWorkspaceInboxAfterConnect(options = {}) {
+  if (!activeProfileId || !isWorkspaceLadyConnected()) return;
+  if (options.force === true && workspaceListFilter !== 'inbox') {
+    workspaceListFilter = 'inbox';
+    persistWorkspaceListFilter();
+  }
+  if (workspaceListFilter !== 'inbox') return;
+  const syncProfileId = String(activeProfileId || '');
+  if (workspaceActiveSyncProfileIds.has(syncProfileId)) return;
+  const controller = new AbortController();
+  const attempts = Math.max(1, Number(options.attempts || 3) || 3);
+  const beforeLetters = [...workspaceLetters];
+  workspaceActiveSyncProfileIds.add(syncProfileId);
+  workspaceActiveSyncControllers.set(syncProfileId, controller);
+  workspaceInboxListLoading = true;
+  workspaceListLoadingFilter = 'inbox';
+  renderCurrentWorkspaceState();
+  try {
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        setWorkspaceActionStatus(`Opening inbox${attempt > 1 ? `, retry ${attempt}` : ''}`);
+        await scanInboxInBatches(WORKSPACE_INBOX_AUTH_REFRESH_PAGES, { profileId: syncProfileId, signal: controller.signal });
+        if (!isWorkspaceProfileCurrent(syncProfileId)) return;
+        await reloadWorkspaceInbox({ profileId: syncProfileId, signal: controller.signal });
+        if (workspaceLetters.length || attempt === attempts) break;
+        await new Promise(resolve => setTimeout(resolve, 800 * attempt));
+      } catch (error) {
+        if (error?.name === 'AbortError' || !isWorkspaceProfileCurrent(syncProfileId)) return;
+        console.warn(`Could not open inbox after connection, attempt ${attempt}`, error);
+        if (attempt === attempts) await reloadWorkspaceInbox({ profileId: syncProfileId }).catch(() => {});
+        else await new Promise(resolve => setTimeout(resolve, 800 * attempt));
+      }
+    }
+    if (hasNewIncomingActivity(beforeLetters, workspaceLetters)) playInboxNewMessageSound();
+  } finally {
+    workspaceActiveSyncProfileIds.delete(syncProfileId);
+    workspaceActiveSyncControllers.delete(syncProfileId);
+    if (isWorkspaceProfileCurrent(syncProfileId)) {
+      workspaceInboxListLoading = false;
+      if (workspaceListLoadingFilter === 'inbox') workspaceListLoadingFilter = '';
+      setWorkspaceActionStatus('');
+      renderCurrentWorkspaceState();
+    }
+  }
+}
+
 async function scanWorkspaceInboxBackground() {
   if (!activeProfileId || !isWorkspaceLadyConnected()) return;
   if (workspaceInboxBackgroundScanning || workspaceInboxListLoading || workspaceListLoadingFilter) return;
@@ -3646,8 +3708,8 @@ async function loadWorkspace() {
     const result = await apiFetch('/api/workspace/inbox');
     workspaceLetters = result.letters || [];
     renderList();
-    if (workspaceAutoloadInbox) {
-      await openWorkspaceInbox(inboxFilterBtn, { authRefresh: true });
+    if (workspaceListFilter === 'inbox' || workspaceAutoloadInbox || !workspaceLetters.length) {
+      await ensureWorkspaceInboxAfterConnect({ force: workspaceAutoloadInbox || !workspaceLetters.length });
     }
     startWorkspaceInboxBackgroundScan();
     const group = findGroup(workspaceSelectedId);
@@ -4527,6 +4589,16 @@ dialog.addEventListener('click', event => {
     selectLetterGroup(workspaceSelectedId, button.dataset.letterKey);
   }
 });
+
+dialog.addEventListener('error', event => {
+  const target = event.target;
+  if (!(target instanceof HTMLImageElement) && !(target instanceof HTMLVideoElement)) return;
+  if (!target.closest?.('.workspace-attachment-preview')) return;
+  const fallbackSrc = String(target.dataset?.fallbackSrc || '').trim();
+  if (!fallbackSrc || target.dataset.fallbackTried === 'true') return;
+  target.dataset.fallbackTried = 'true';
+  target.src = fallbackSrc;
+}, true);
 
 dialog.addEventListener('dblclick', event => {
   const historyCard = event.target.closest('[data-history-url]');
