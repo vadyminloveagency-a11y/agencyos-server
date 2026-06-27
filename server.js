@@ -600,6 +600,14 @@ function workspaceAttachmentFileName(profileId, letterKey, index, attachment, co
   return `${String(profileId || 'profile').replace(/[^\w-]/g, '_')}/${String(letterKey || 'letter').replace(/[^\w-]/g, '_').slice(0, 80)}/${index + 1}-${hash}${workspaceAttachmentExtension(attachment, contentType)}`;
 }
 
+async function fetchWorkspaceAttachment(profileId, sourceUrl) {
+  const session = dreamSessions.get(String(profileId || ''));
+  if (session && /(^|\.)dream-singles\.com\//i.test(String(sourceUrl || ''))) {
+    return agencyFetch(sourceUrl, { method: 'GET' }, session.jar);
+  }
+  return fetch(sourceUrl);
+}
+
 async function cacheWorkspaceAttachments(profileId, letterKey, attachments = []) {
   const clean = cleanWorkspaceAttachments(attachments);
   const cached = [];
@@ -613,7 +621,7 @@ async function cacheWorkspaceAttachments(profileId, letterKey, attachments = [])
 
     const sourceUrl = attachment.sourceUrl || attachment.url;
     try {
-      const response = await fetch(sourceUrl);
+      const response = await fetchWorkspaceAttachment(profileId, sourceUrl);
       const contentType = response.headers.get('content-type') || '';
       const length = Number(response.headers.get('content-length') || 0);
       const maxBytes = attachment.type === 'video' ? 80 * 1024 * 1024 : 12 * 1024 * 1024;
@@ -6654,6 +6662,13 @@ app.post('/api/workspace/read-letter', async (req, res) => {
     if (letter.requiresLogin) throw new Error('Dream Singles login is required');
     if (!letter.bodyText && !letter.conversation?.length && !letter.attachments?.length) {
       throw new Error('Could not read letter text');
+    }
+    if (letter.attachments?.length) {
+      letter.attachments = await cacheWorkspaceAttachments(
+        req.profileId,
+        workspaceMessageIdentity(url.href) || crypto.createHash('sha1').update(url.href).digest('hex').slice(0, 20),
+        letter.attachments
+      );
     }
     res.json({ ok: true, letter: { ...letter, messageLink: rawUrl } });
   } catch (error) {

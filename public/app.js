@@ -5702,6 +5702,8 @@ function openSyncConfirm(mode) {
 }
 
 async function startSync(mode) {
+  const syncProfileId = String(activeProfileId || '');
+  if (!syncProfileId) return;
   try {
     activeSyncMode = mode === 'full' ? 'full' : 'daily';
     showPendingSyncButton(activeSyncMode);
@@ -5721,7 +5723,7 @@ async function startSync(mode) {
       ? 'Scan All: opening Dream inbox and scanning pages'
       : 'Update Today: opening Dream inbox and scanning 3 pages');
     showExtensionStatus({ phase: 'server-sync', ready: true, message: 'Server is reading Dream Singles inbox...' });
-    const result = await serverProfileRequest('server-sync-inbox', {
+    const result = await serverProfileRequestFor(syncProfileId, 'server-sync-inbox', {
       timeoutMs: mode === 'full' ? 240000 : 120000,
       body: {
         maxPages: mode === 'full'
@@ -5730,8 +5732,10 @@ async function startSync(mode) {
       }
     });
     activeButton?.setAttribute('title', 'Loading saved men list into AgencyOS');
-    await loadMen(false);
-    if (currentView === 'chat') await loadChatFavorites();
+    if (String(activeProfileId || '') === syncProfileId) {
+      await loadMen(false);
+      if (currentView === 'chat') await loadChatFavorites();
+    }
     showExtensionStatus({
       phase: 'server-done',
       ready: true,

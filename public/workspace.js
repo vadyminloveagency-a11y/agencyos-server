@@ -130,8 +130,8 @@ let workspaceMediaSyncedAt = '';
 let workspaceMediaPreviewId = '';
 let workspaceMediaLastStats = [];
 let workspaceProfileSyncRunning = false;
-let workspaceActiveSyncProfileId = '';
-let workspaceActiveSyncController = null;
+const workspaceActiveSyncProfileIds = new Set();
+const workspaceActiveSyncControllers = new Map();
 const MAX_REPLY_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 const WORKSPACE_MEDIA_PAGE_SIZE = 20;
 const WORKSPACE_MEDIA_SECTIONS = {
@@ -185,11 +185,13 @@ function isWorkspaceProfileCurrent(profileId) {
 }
 
 function abortWorkspaceProfileSync() {
-  if (workspaceActiveSyncController) {
-    workspaceActiveSyncController.abort();
-    workspaceActiveSyncController = null;
+  const currentId = String(activeProfileId || '');
+  const controller = workspaceActiveSyncControllers.get(currentId);
+  if (controller) {
+    controller.abort();
+    workspaceActiveSyncControllers.delete(currentId);
   }
-  workspaceActiveSyncProfileId = '';
+  if (currentId) workspaceActiveSyncProfileIds.delete(currentId);
   setProfileSyncRunning(false);
   if (refreshBtn) {
     refreshBtn.disabled = false;
@@ -356,12 +358,14 @@ function resetWorkspaceRuntimeForProfile(profileId) {
 async function switchWorkspaceProfileFromShell(profileId) {
   const id = String(profileId || '');
   if (!id || id === activeProfileId) return;
-  abortWorkspaceProfileSync();
   setWorkspaceBlockingOverlay(true, 'Reloading');
   try {
     setWorkspaceActionStatus('Reloading');
     resetWorkspaceRuntimeForProfile(id);
     await loadWorkspace();
+    if (workspaceActiveSyncProfileIds.has(id)) {
+      setProfileSyncRunning(true, 'Syncing Dream Singles');
+    }
   } finally {
     setWorkspaceActionStatus('');
     setWorkspaceBlockingOverlay(false);
@@ -514,11 +518,6 @@ function renderWorkspacePager(totalItems) {
     menList.parentElement.insertBefore(pager, menList);
   }
   const { page, totalPages } = clampWorkspacePage(totalItems);
-  if (totalPages <= 1) {
-    pager.innerHTML = '';
-    pager.classList.add('hidden');
-    return;
-  }
   const start = Math.max(1, page - 2);
   const end = Math.min(totalPages, page + 2);
   const buttons = [];
@@ -1876,7 +1875,6 @@ function restoreWorkspaceSelectedHistory(group) {
 function renderWorkspaceHistoryPager(totalItems = 0, currentPage = workspaceHistoryPage) {
   const totalPages = Math.max(1, Math.ceil((Number(totalItems) || 0) / WORKSPACE_HISTORY_PAGE_SIZE));
   const page = Math.min(totalPages, Math.max(1, Number(currentPage) || 1));
-  if (totalPages <= 1) return '';
   const pages = new Set([1, totalPages, page, page - 1, page + 1]);
   if (page <= 3) {
     pages.add(2);
@@ -3731,14 +3729,17 @@ function workspaceKnownLetterKeysForId(id) {
 async function scanAndSaveInbox(rows = workspaceSyncRows(), options = {}) {
   const requestProfileId = String(options.profileId || activeProfileId || '');
   if (!requestProfileId) return { letters: workspaceLetters, scannedLetters: [], imported: 0, lastPage: 1 };
+  const showProgress = isWorkspaceProfileCurrent(requestProfileId);
   const full = options.full === true;
   const exactPage = Math.max(0, Number(options.page || 0) || 0);
   const syncRows = full
     ? WORKSPACE_FULL_SYNC_PAGES
     : Math.min(WORKSPACE_FULL_SYNC_PAGES, Math.max(1, Number(rows) || WORKSPACE_SYNC_ROWS_DEFAULT));
-  setWorkspaceActionStatus(exactPage
-    ? `Scanning Dream inbox page ${exactPage}`
-    : `Opening Dream inbox and scanning ${syncRows} page${syncRows === 1 ? '' : 's'}`);
+  if (showProgress) {
+    setWorkspaceActionStatus(exactPage
+      ? `Scanning Dream inbox page ${exactPage}`
+      : `Opening Dream inbox and scanning ${syncRows} page${syncRows === 1 ? '' : 's'}`);
+  }
   const response = await apiFetch('/api/workspace/scan-inbox', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -3764,7 +3765,7 @@ async function scanAndSaveInbox(rows = workspaceSyncRows(), options = {}) {
   const favoriteText = response.favorites
     ? ` Favorites checked: ${response.favorites.favorites || 0}.`
     : '';
-  setWorkspaceActionStatus(`Men list saved from inbox: ${response.imported || 0} rows.${favoriteText}`);
+  if (showProgress) setWorkspaceActionStatus(`Men list saved from inbox: ${response.imported || 0} rows.${favoriteText}`);
   return {
     letters: workspaceLetters,
     scannedLetters: response.letters || [],
@@ -3774,11 +3775,12 @@ async function scanAndSaveInbox(rows = workspaceSyncRows(), options = {}) {
 }
 
 async function scanInboxInBatches(batchSize = WORKSPACE_INBOX_SYNC_PAGES, options = {}) {
-  const requestProfileId = String(activeProfileId || '');
+  const requestProfileId = String(options.profileId || activeProfileId || '');
   if (!requestProfileId) return { imported: 0, lastPage: 1, letters: workspaceLetters };
   const size = Math.min(WORKSPACE_FULL_SYNC_PAGES, Math.max(1, Number(batchSize) || WORKSPACE_INBOX_SYNC_PAGES));
   const signal = options.signal;
-  setWorkspaceActionStatus(`Step 1/4: scanning inbox pages 1-${size}`);
+  const showProgress = isWorkspaceProfileCurrent(requestProfileId);
+  if (showProgress) setWorkspaceActionStatus(`Step 1/4: scanning inbox pages 1-${size}`);
   const first = await scanAndSaveInbox(size, {
     mergeOnly: true,
     limitLetters: false,
@@ -3786,17 +3788,17 @@ async function scanInboxInBatches(batchSize = WORKSPACE_INBOX_SYNC_PAGES, option
     profileId: requestProfileId,
     signal
   });
-  if (!isWorkspaceProfileCurrent(requestProfileId)) return first;
   let lastPage = Math.max(size, Number(first.lastPage || size) || size);
   await reloadWorkspaceInbox({ profileId: requestProfileId, signal });
-  if (!isWorkspaceProfileCurrent(requestProfileId)) return first;
-  renderCurrentWorkspaceState();
+  if (showProgress && isWorkspaceProfileCurrent(requestProfileId)) renderCurrentWorkspaceState();
   if (lastPage <= size) return first;
 
   let imported = first.imported || 0;
   for (let start = size + 1; start <= lastPage; start += size) {
     const end = Math.min(lastPage, start + size - 1);
-    setWorkspaceActionStatus(`Step 1/4: scanning inbox pages ${start}-${end} of ${lastPage}`);
+    if (showProgress && isWorkspaceProfileCurrent(requestProfileId)) {
+      setWorkspaceActionStatus(`Step 1/4: scanning inbox pages ${start}-${end} of ${lastPage}`);
+    }
     for (let page = start; page <= end; page += 1) {
       const result = await scanAndSaveInbox(1, {
         page,
@@ -3806,15 +3808,13 @@ async function scanInboxInBatches(batchSize = WORKSPACE_INBOX_SYNC_PAGES, option
         profileId: requestProfileId,
         signal
       });
-      if (!isWorkspaceProfileCurrent(requestProfileId)) return { imported, lastPage, letters: workspaceLetters };
       imported += result.imported || 0;
       lastPage = Math.max(lastPage, Number(result.lastPage || lastPage) || lastPage);
     }
     await reloadWorkspaceInbox({ profileId: requestProfileId, signal });
-    if (!isWorkspaceProfileCurrent(requestProfileId)) return { imported, lastPage, letters: workspaceLetters };
-    renderCurrentWorkspaceState();
+    if (showProgress && isWorkspaceProfileCurrent(requestProfileId)) renderCurrentWorkspaceState();
   }
-  setWorkspaceActionStatus(`Inbox scan done: ${imported} rows updated.`);
+  if (showProgress && isWorkspaceProfileCurrent(requestProfileId)) setWorkspaceActionStatus(`Inbox scan done: ${imported} rows updated.`);
   return { imported, lastPage, letters: workspaceLetters };
 }
 
@@ -4006,10 +4006,10 @@ async function readTargetsFromAllMen() {
 async function syncAllWorkspace(button = refreshBtn) {
   if (!activeProfileId) return;
   const syncProfileId = String(activeProfileId || '');
-  if (workspaceActiveSyncProfileId) return;
+  if (workspaceActiveSyncProfileIds.has(syncProfileId)) return;
   const controller = new AbortController();
-  workspaceActiveSyncProfileId = syncProfileId;
-  workspaceActiveSyncController = controller;
+  workspaceActiveSyncProfileIds.add(syncProfileId);
+  workspaceActiveSyncControllers.set(syncProfileId, controller);
   const oldText = button?.textContent || '';
   setProfileSyncRunning(true, 'Starting sync');
   if (button) {
@@ -4019,7 +4019,7 @@ async function syncAllWorkspace(button = refreshBtn) {
   if (rowsUpdateBtn && rowsUpdateBtn !== button) rowsUpdateBtn.disabled = true;
   if (syncRowsInput) syncRowsInput.disabled = true;
   try {
-    await scanInboxInBatches(WORKSPACE_INBOX_SYNC_PAGES, { signal: controller.signal });
+    await scanInboxInBatches(WORKSPACE_INBOX_SYNC_PAGES, { profileId: syncProfileId, signal: controller.signal });
     if (!isWorkspaceProfileCurrent(syncProfileId)) return;
     setWorkspaceActionStatus('Step 3/4: loading saved men list');
     await reloadWorkspaceInbox({ profileId: syncProfileId, signal: controller.signal });
@@ -4032,10 +4032,8 @@ async function syncAllWorkspace(button = refreshBtn) {
     renderCurrentWorkspaceState();
     alert(error.message || 'Could not sync workspace');
   } finally {
-    if (workspaceActiveSyncProfileId === syncProfileId) {
-      workspaceActiveSyncProfileId = '';
-      workspaceActiveSyncController = null;
-    }
+    workspaceActiveSyncProfileIds.delete(syncProfileId);
+    workspaceActiveSyncControllers.delete(syncProfileId);
     if (button && isWorkspaceProfileCurrent(syncProfileId)) {
       button.disabled = false;
       button.textContent = oldText || 'Update';
