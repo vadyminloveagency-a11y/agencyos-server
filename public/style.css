@@ -23854,57 +23854,44 @@ body.mandarin-home-active .agency-shell-main {
   position: relative !important;
 }
 
-body.mandarin-home-active.agency-profile-switching .agency-shell-main::before {
-  content: "";
+body.mandarin-home-active .agency-reload-overlay {
   position: absolute;
-  left: 50%;
-  top: calc(50% - 78px);
+  inset: 0;
+  z-index: 2147483000;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 28px;
+  background: #fbfaf9;
+  color: #171412;
+  font-size: 16px;
+  font-weight: 800;
+  text-align: center;
+  pointer-events: all;
+}
+
+body.mandarin-home-active .agency-reload-overlay[hidden] {
+  display: none !important;
+}
+
+body.mandarin-home-active .agency-reload-spinner {
   width: 170px;
   height: 170px;
-  transform: translate(-50%, -50%);
-  z-index: 80;
   border-radius: 50%;
   background: conic-gradient(from 0deg, #6d6af4, #9190f5, #d8dafc, #f2f3ff, #6d6af4);
-  box-shadow: 0 0 0 9999px #fbfaf9;
   mask-image: radial-gradient(circle, transparent 0 46%, #000 47% 68%, transparent 69%);
   -webkit-mask-image: radial-gradient(circle, transparent 0 46%, #000 47% 68%, transparent 69%);
   animation: agency-reload-spin-centered 1s linear infinite;
-  pointer-events: none;
-}
-
-body.mandarin-home-active.agency-profile-switching .agency-shell-main::after {
-  content: attr(data-profile-switch-title);
-  white-space: pre;
-  position: absolute;
-  left: 50%;
-  top: calc(50% + 42px);
-  z-index: 81;
-  transform: translateX(-50%);
-  max-width: min(360px, calc(100vw - 320px));
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: #171412;
-  box-shadow: none;
-  font-size: 16px;
-  font-weight: 800;
-  line-height: 1.35;
-  text-align: center;
-  pointer-events: none;
 }
 
 @keyframes agency-reload-spin-centered {
   to {
-    transform: translate(-50%, -50%) rotate(360deg);
+    transform: rotate(360deg);
   }
 }
 
-body.mandarin-home-active:not(.app-dark-theme).agency-profile-switching .agency-shell-main::before {
-  background: conic-gradient(from 0deg, #6d6af4, #9190f5, #d8dafc, #f2f3ff, #6d6af4);
-}
-
-body.mandarin-home-active:not(.app-dark-theme).agency-profile-switching .agency-shell-main::after {
+body.mandarin-home-active:not(.app-dark-theme) .agency-reload-overlay {
+  background: #fbfaf9;
   color: #241f1b;
 }
 

@@ -1625,6 +1625,15 @@ function setProfileSwitchOverlay(active, profile = null) {
   if (shellMain) {
     shellMain.dataset.profileSwitchTitle = enabled ? 'Reloading' : '';
     shellMain.dataset.profileSwitchName = '';
+    let overlay = shellMain.querySelector('.agency-reload-overlay');
+    if (enabled && !overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'agency-reload-overlay';
+      overlay.setAttribute('aria-live', 'polite');
+      overlay.innerHTML = '<span class="agency-reload-spinner" aria-hidden="true"></span><strong>Reloading</strong>';
+      shellMain.appendChild(overlay);
+    }
+    if (overlay) overlay.hidden = !enabled;
   }
   if (enabled) {
     profileSwitchClearTimer = setTimeout(() => setProfileSwitchOverlay(false), 9000);
