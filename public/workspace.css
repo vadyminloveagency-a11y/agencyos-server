@@ -9769,6 +9769,60 @@ body.workspace-embedded .workspace-choose-letter {
   transform: translate(-50%, -50%) !important;
 }
 
+body.workspace-embedded.workspace-sync-overlay-active {
+  overflow: hidden !important;
+}
+
+body.workspace-embedded.workspace-sync-overlay-active::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  background: #fbfaf9;
+  pointer-events: all;
+}
+
+body.workspace-embedded.workspace-sync-overlay-active::after {
+  content: attr(data-sync-overlay-message);
+  position: fixed;
+  inset: 0;
+  z-index: 2147483001;
+  display: grid;
+  place-items: center;
+  padding-top: 190px;
+  box-sizing: border-box;
+  color: #171412;
+  font-family: Montserrat, Arial, sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  text-align: center;
+  white-space: pre-wrap;
+  pointer-events: none;
+}
+
+body.workspace-embedded.workspace-sync-overlay-active .workspace-shell::before {
+  content: "";
+  position: fixed;
+  left: 50%;
+  top: calc(50% - 78px);
+  z-index: 2147483002;
+  width: 170px;
+  height: 170px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, #6d6af4, #9190f5, #d8dafc, #f2f3ff, #6d6af4);
+  mask-image: radial-gradient(circle, transparent 0 46%, #000 47% 68%, transparent 69%);
+  -webkit-mask-image: radial-gradient(circle, transparent 0 46%, #000 47% 68%, transparent 69%);
+  animation: workspace-sync-overlay-spin 1s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes workspace-sync-overlay-spin {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
 /* Embedded full-bleed fit: remove iframe-edge gaps and keep composer fully visible. */
 html,
 body.workspace-embedded {

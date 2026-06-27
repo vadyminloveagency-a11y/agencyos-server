@@ -378,6 +378,7 @@ function updateProfileSyncStatus(message = '', status = {}) {
 
 function setProfileSyncRunning(active, message = '') {
   workspaceProfileSyncRunning = active === true;
+  document.body.classList.toggle('workspace-sync-overlay-active', workspaceProfileSyncRunning);
   if (refreshBtn) {
     refreshBtn.classList.toggle('syncing', workspaceProfileSyncRunning);
     refreshBtn.setAttribute('aria-busy', workspaceProfileSyncRunning ? 'true' : 'false');
@@ -397,6 +398,7 @@ function setProfileSyncRunning(active, message = '') {
 
 function setWorkspaceActionStatus(message = '', button = null) {
   const text = String(message || '').trim();
+  document.body.dataset.syncOverlayMessage = text || (workspaceProfileSyncRunning ? 'Syncing Dream Inbox...' : '');
   if (button) button.title = text || button.getAttribute('aria-label') || button.textContent || 'Action';
   if (workspaceProfileSyncRunning && refreshBtn) {
     refreshBtn.title = text || 'Syncing Dream Singles';
