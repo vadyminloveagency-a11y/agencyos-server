@@ -23857,36 +23857,41 @@ body.mandarin-home-active .agency-shell-main {
 body.mandarin-home-active.agency-profile-switching .agency-shell-main::before {
   content: "";
   position: absolute;
-  inset: 0;
+  top: 18px;
+  right: 22px;
+  width: 10px;
+  height: 10px;
   z-index: 80;
-  background: rgba(21, 19, 17, 0.82);
-  backdrop-filter: blur(2px);
-  pointer-events: all;
+  border-radius: 50%;
+  background: #d1785f;
+  box-shadow: 0 0 0 6px rgba(209, 120, 95, 0.16);
+  pointer-events: none;
 }
 
 body.mandarin-home-active.agency-profile-switching .agency-shell-main::after {
   content: attr(data-profile-switch-title) "\A" attr(data-profile-switch-name);
   white-space: pre;
   position: absolute;
-  left: 50%;
-  top: 50%;
+  right: 42px;
+  top: 10px;
   z-index: 81;
-  transform: translate(-50%, -50%);
-  min-width: 240px;
-  padding: 22px 28px;
+  transform: none;
+  max-width: min(360px, calc(100vw - 320px));
+  padding: 8px 12px;
   border: 1px solid #3a312a;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #1b1816;
   color: #f5eee9;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.32);
-  font-size: 13px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+  font-size: 11px;
   font-weight: 700;
-  line-height: 1.55;
-  text-align: center;
+  line-height: 1.35;
+  text-align: left;
+  pointer-events: none;
 }
 
 body.mandarin-home-active:not(.app-dark-theme).agency-profile-switching .agency-shell-main::before {
-  background: rgba(247, 241, 237, 0.82);
+  background: #d1785f;
 }
 
 body.mandarin-home-active:not(.app-dark-theme).agency-profile-switching .agency-shell-main::after {

@@ -1587,6 +1587,11 @@ function switchWorkspaceProfileInPlace(profileId, reason = 'switch-profile') {
   if (!sent) reloadWorkspaceEmbed(reason);
 }
 
+function getActiveAgencyPanel() {
+  if (!document.body.classList.contains('mandarin-home-active')) return '';
+  return normalizeAgencyPanel(localStorage.getItem(AGENCY_PANEL_KEY) || 'home');
+}
+
 function setProfileSwitchOverlay(active, profile = null) {
   if (profileSwitchClearTimer) {
     clearTimeout(profileSwitchClearTimer);
@@ -2222,8 +2227,10 @@ async function switchWorkingProfile(profileId, options = {}) {
     if (chatFavoritesBody) chatFavoritesBody.innerHTML = '';
     updateCounter();
     if (ladyConnected) {
+      const activeAgencyPanel = getActiveAgencyPanel();
+      const shouldLoadLegacyMen = !activeAgencyPanel || activeAgencyPanel === 'favorites';
       if (currentView === 'chat') await loadChatFavorites().catch(() => {});
-      else await loadMen(false).catch(() => {});
+      else if (shouldLoadLegacyMen) await loadMen(false).catch(() => {});
       if (document.body.classList.contains('mandarin-home-active')) {
         if ((localStorage.getItem(AGENCY_PANEL_KEY) || '') === 'favorites') activateAgencyPanel('favorites', { reloadFavorites: true, persist: false });
         if ((localStorage.getItem(AGENCY_PANEL_KEY) || '') === 'inbox') activateAgencyPanel('inbox', { reloadInbox: false, persist: false });
