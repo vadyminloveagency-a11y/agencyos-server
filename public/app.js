@@ -1623,10 +1623,8 @@ function setProfileSwitchOverlay(active, profile = null) {
   document.body.classList.toggle('agency-profile-switching', enabled);
   const shellMain = mandarinHomeScreen?.querySelector('.agency-shell-main');
   if (shellMain) {
-    shellMain.dataset.profileSwitchTitle = enabled ? 'Switching profile' : '';
-    shellMain.dataset.profileSwitchName = enabled && profile
-      ? `${profile.name || 'Profile'} - ID ${profile.id || ''}`
-      : '';
+    shellMain.dataset.profileSwitchTitle = enabled ? 'Reloading' : '';
+    shellMain.dataset.profileSwitchName = '';
   }
   if (enabled) {
     profileSwitchClearTimer = setTimeout(() => setProfileSwitchOverlay(false), 9000);
@@ -6787,6 +6785,7 @@ async function runAgencyNavigation(action) {
     return;
   }
   if (command === 'refresh') {
+    setProfileSwitchOverlay(true);
     if (agencyRefreshBtn) {
       agencyRefreshBtn.disabled = true;
       agencyRefreshBtn.classList.add('is-reloading');

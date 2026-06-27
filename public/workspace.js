@@ -130,6 +130,8 @@ let workspaceMediaSyncedAt = '';
 let workspaceMediaPreviewId = '';
 let workspaceMediaLastStats = [];
 let workspaceProfileSyncRunning = false;
+let workspaceActiveSyncProfileId = '';
+let workspaceActiveSyncController = null;
 const MAX_REPLY_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 const WORKSPACE_MEDIA_PAGE_SIZE = 20;
 const WORKSPACE_MEDIA_SECTIONS = {
@@ -176,6 +178,25 @@ workspaceListPage = Math.max(1, Number(sessionStorage.getItem(`${workspaceSessio
 function persistWorkspaceListPage(filter = workspaceListFilter) {
   if (filter !== 'inbox') return;
   sessionStorage.setItem(`${workspaceSessionPrefix}_list_page_${filter}`, String(Math.max(1, Number(workspaceListPage) || 1)));
+}
+
+function isWorkspaceProfileCurrent(profileId) {
+  return String(profileId || '') === String(activeProfileId || '');
+}
+
+function abortWorkspaceProfileSync() {
+  if (workspaceActiveSyncController) {
+    workspaceActiveSyncController.abort();
+    workspaceActiveSyncController = null;
+  }
+  workspaceActiveSyncProfileId = '';
+  setProfileSyncRunning(false);
+  if (refreshBtn) {
+    refreshBtn.disabled = false;
+    refreshBtn.textContent = 'Update';
+  }
+  if (rowsUpdateBtn) rowsUpdateBtn.disabled = false;
+  if (syncRowsInput) syncRowsInput.disabled = false;
 }
 
 if (workspaceEmbedded) {
@@ -335,9 +356,10 @@ function resetWorkspaceRuntimeForProfile(profileId) {
 async function switchWorkspaceProfileFromShell(profileId) {
   const id = String(profileId || '');
   if (!id || id === activeProfileId) return;
-  setWorkspaceBlockingOverlay(true, 'Switching profile...');
+  abortWorkspaceProfileSync();
+  setWorkspaceBlockingOverlay(true, 'Reloading');
   try {
-    setWorkspaceActionStatus('Switching profile...');
+    setWorkspaceActionStatus('Reloading');
     resetWorkspaceRuntimeForProfile(id);
     await loadWorkspace();
   } finally {
@@ -404,14 +426,14 @@ function setWorkspaceBlockingOverlay(active, message = '') {
   const enabled = active === true;
   document.body.classList.toggle('workspace-blocking-overlay-active', enabled);
   document.body.dataset.blockingOverlayMessage = enabled
-    ? (String(message || '').trim() || 'Loading Inbox...')
+    ? (String(message || '').trim() || 'Reloading')
     : '';
 }
 
 function setWorkspaceActionStatus(message = '', button = null) {
   const text = String(message || '').trim();
   if (document.body.classList.contains('workspace-blocking-overlay-active')) {
-    document.body.dataset.blockingOverlayMessage = text || 'Loading Inbox...';
+    document.body.dataset.blockingOverlayMessage = text || 'Reloading';
   }
   if (button) button.title = text || button.getAttribute('aria-label') || button.textContent || 'Action';
   if (workspaceProfileSyncRunning && refreshBtn) {
@@ -1465,8 +1487,8 @@ function renderLoading() {
       <div class="workspace-empty-main">
         <div class="workspace-loading-state" aria-live="polite">
           <span class="workspace-spinner"></span>
-          <strong>Loading Inbox</strong>
-          <span>Preparing your workspace...</span>
+          <strong>Reloading</strong>
+          <span>Please wait...</span>
         </div>
       </div>
       <aside class="workspace-empty-side" aria-hidden="true"></aside>
@@ -3512,13 +3534,21 @@ function autoSyncSelectedManFromList() {
 
 async function apiFetch(url, options = {}) {
   const headers = new Headers(options.headers || {});
-  if (activeProfileId) headers.set('X-Profile-ID', activeProfileId);
+  const profileHeaderId = String(options.profileId || activeProfileId || '');
+  if (profileHeaderId) headers.set('X-Profile-ID', profileHeaderId);
   const timeoutMs = Math.max(0, Number(options.timeoutMs || 0) || 0);
-  const controller = timeoutMs ? new AbortController() : null;
-  const timer = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
+  const controller = new AbortController();
+  const externalSignal = options.signal;
+  const abortFromExternal = () => controller.abort();
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort();
+    else externalSignal.addEventListener('abort', abortFromExternal, { once: true });
+  }
+  const timer = timeoutMs ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
   let response;
   try {
-    response = await fetch(url, { ...options, headers, signal: controller?.signal || options.signal });
+    const { timeoutMs: _timeoutMs, signal: _signal, profileId: _profileId, ...fetchOptions } = options;
+    response = await fetch(url, { ...fetchOptions, headers, signal: controller.signal });
   } catch (error) {
     if (error?.name === 'AbortError') {
       throw new Error('Dream inbox scan timed out. Try Update again or relogin this profile.');
@@ -3526,6 +3556,7 @@ async function apiFetch(url, options = {}) {
     throw error;
   } finally {
     if (timer) window.clearTimeout(timer);
+    if (externalSignal) externalSignal.removeEventListener('abort', abortFromExternal);
   }
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || 'Request failed');
@@ -3698,6 +3729,8 @@ function workspaceKnownLetterKeysForId(id) {
 }
 
 async function scanAndSaveInbox(rows = workspaceSyncRows(), options = {}) {
+  const requestProfileId = String(options.profileId || activeProfileId || '');
+  if (!requestProfileId) return { letters: workspaceLetters, scannedLetters: [], imported: 0, lastPage: 1 };
   const full = options.full === true;
   const exactPage = Math.max(0, Number(options.page || 0) || 0);
   const syncRows = full
@@ -3709,14 +3742,24 @@ async function scanAndSaveInbox(rows = workspaceSyncRows(), options = {}) {
   const response = await apiFetch('/api/workspace/scan-inbox', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    profileId: requestProfileId,
+    signal: options.signal,
     timeoutMs: Math.max(90000, syncRows * 30000),
     body: JSON.stringify({
-      sourceProfileId: activeProfileId,
+      sourceProfileId: requestProfileId,
       maxPages: syncRows,
       page: exactPage,
       syncFavorites: options.syncFavorites !== false
     })
   });
+  if (!isWorkspaceProfileCurrent(requestProfileId)) {
+    return {
+      letters: workspaceLetters,
+      scannedLetters: [],
+      imported: 0,
+      lastPage: Math.max(1, Number(response.lastPage || exactPage || 1) || 1)
+    };
+  }
   workspaceLetters = response.letters || workspaceLetters;
   const favoriteText = response.favorites
     ? ` Favorites checked: ${response.favorites.favorites || 0}.`
@@ -3730,12 +3773,23 @@ async function scanAndSaveInbox(rows = workspaceSyncRows(), options = {}) {
   };
 }
 
-async function scanInboxInBatches(batchSize = WORKSPACE_INBOX_SYNC_PAGES) {
+async function scanInboxInBatches(batchSize = WORKSPACE_INBOX_SYNC_PAGES, options = {}) {
+  const requestProfileId = String(activeProfileId || '');
+  if (!requestProfileId) return { imported: 0, lastPage: 1, letters: workspaceLetters };
   const size = Math.min(WORKSPACE_FULL_SYNC_PAGES, Math.max(1, Number(batchSize) || WORKSPACE_INBOX_SYNC_PAGES));
+  const signal = options.signal;
   setWorkspaceActionStatus(`Step 1/4: scanning inbox pages 1-${size}`);
-  const first = await scanAndSaveInbox(size, { mergeOnly: true, limitLetters: false, syncFavorites: false });
+  const first = await scanAndSaveInbox(size, {
+    mergeOnly: true,
+    limitLetters: false,
+    syncFavorites: false,
+    profileId: requestProfileId,
+    signal
+  });
+  if (!isWorkspaceProfileCurrent(requestProfileId)) return first;
   let lastPage = Math.max(size, Number(first.lastPage || size) || size);
-  await reloadWorkspaceInbox();
+  await reloadWorkspaceInbox({ profileId: requestProfileId, signal });
+  if (!isWorkspaceProfileCurrent(requestProfileId)) return first;
   renderCurrentWorkspaceState();
   if (lastPage <= size) return first;
 
@@ -3748,20 +3802,26 @@ async function scanInboxInBatches(batchSize = WORKSPACE_INBOX_SYNC_PAGES) {
         page,
         mergeOnly: true,
         limitLetters: false,
-        syncFavorites: false
+        syncFavorites: false,
+        profileId: requestProfileId,
+        signal
       });
+      if (!isWorkspaceProfileCurrent(requestProfileId)) return { imported, lastPage, letters: workspaceLetters };
       imported += result.imported || 0;
       lastPage = Math.max(lastPage, Number(result.lastPage || lastPage) || lastPage);
     }
-    await reloadWorkspaceInbox();
+    await reloadWorkspaceInbox({ profileId: requestProfileId, signal });
+    if (!isWorkspaceProfileCurrent(requestProfileId)) return { imported, lastPage, letters: workspaceLetters };
     renderCurrentWorkspaceState();
   }
   setWorkspaceActionStatus(`Inbox scan done: ${imported} rows updated.`);
   return { imported, lastPage, letters: workspaceLetters };
 }
 
-async function reloadWorkspaceInbox() {
-  const response = await apiFetch('/api/workspace/inbox');
+async function reloadWorkspaceInbox(options = {}) {
+  const requestProfileId = String(options.profileId || activeProfileId || '');
+  const response = await apiFetch('/api/workspace/inbox', { profileId: requestProfileId, signal: options.signal });
+  if (requestProfileId && !isWorkspaceProfileCurrent(requestProfileId)) return workspaceLetters;
   workspaceLetters = response.letters || workspaceLetters;
   return workspaceLetters;
 }
@@ -3945,6 +4005,11 @@ async function readTargetsFromAllMen() {
 
 async function syncAllWorkspace(button = refreshBtn) {
   if (!activeProfileId) return;
+  const syncProfileId = String(activeProfileId || '');
+  if (workspaceActiveSyncProfileId) return;
+  const controller = new AbortController();
+  workspaceActiveSyncProfileId = syncProfileId;
+  workspaceActiveSyncController = controller;
   const oldText = button?.textContent || '';
   setProfileSyncRunning(true, 'Starting sync');
   if (button) {
@@ -3954,23 +4019,32 @@ async function syncAllWorkspace(button = refreshBtn) {
   if (rowsUpdateBtn && rowsUpdateBtn !== button) rowsUpdateBtn.disabled = true;
   if (syncRowsInput) syncRowsInput.disabled = true;
   try {
-    await scanInboxInBatches(WORKSPACE_INBOX_SYNC_PAGES);
+    await scanInboxInBatches(WORKSPACE_INBOX_SYNC_PAGES, { signal: controller.signal });
+    if (!isWorkspaceProfileCurrent(syncProfileId)) return;
     setWorkspaceActionStatus('Step 3/4: loading saved men list');
-    await reloadWorkspaceInbox();
+    await reloadWorkspaceInbox({ profileId: syncProfileId, signal: controller.signal });
+    if (!isWorkspaceProfileCurrent(syncProfileId)) return;
     setWorkspaceActionStatus('Step 4/4: refreshing AgencyOS list');
     if (hasPendingIncomingLetters()) playInboxNewMessageSound();
     renderCurrentWorkspaceState();
   } catch (error) {
+    if (error?.name === 'AbortError' || !isWorkspaceProfileCurrent(syncProfileId)) return;
     renderCurrentWorkspaceState();
     alert(error.message || 'Could not sync workspace');
   } finally {
-    if (button) {
+    if (workspaceActiveSyncProfileId === syncProfileId) {
+      workspaceActiveSyncProfileId = '';
+      workspaceActiveSyncController = null;
+    }
+    if (button && isWorkspaceProfileCurrent(syncProfileId)) {
       button.disabled = false;
       button.textContent = oldText || 'Update';
     }
-    if (rowsUpdateBtn && rowsUpdateBtn !== button) rowsUpdateBtn.disabled = false;
-    if (syncRowsInput) syncRowsInput.disabled = false;
-    setProfileSyncRunning(false);
+    if (isWorkspaceProfileCurrent(syncProfileId)) {
+      if (rowsUpdateBtn && rowsUpdateBtn !== button) rowsUpdateBtn.disabled = false;
+      if (syncRowsInput) syncRowsInput.disabled = false;
+      setProfileSyncRunning(false);
+    }
   }
 }
 
