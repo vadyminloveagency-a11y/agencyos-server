@@ -9769,11 +9769,11 @@ body.workspace-embedded .workspace-choose-letter {
   transform: translate(-50%, -50%) !important;
 }
 
-body.workspace-embedded.workspace-sync-overlay-active {
+body.workspace-embedded.workspace-blocking-overlay-active {
   overflow: hidden !important;
 }
 
-body.workspace-embedded.workspace-sync-overlay-active::before {
+body.workspace-embedded.workspace-blocking-overlay-active::before {
   content: "";
   position: fixed;
   inset: 0;
@@ -9782,8 +9782,8 @@ body.workspace-embedded.workspace-sync-overlay-active::before {
   pointer-events: all;
 }
 
-body.workspace-embedded.workspace-sync-overlay-active::after {
-  content: attr(data-sync-overlay-message);
+body.workspace-embedded.workspace-blocking-overlay-active::after {
+  content: attr(data-blocking-overlay-message);
   position: fixed;
   inset: 0;
   z-index: 2147483001;
@@ -9800,7 +9800,7 @@ body.workspace-embedded.workspace-sync-overlay-active::after {
   pointer-events: none;
 }
 
-body.workspace-embedded.workspace-sync-overlay-active .workspace-shell::before {
+body.workspace-embedded.workspace-blocking-overlay-active .workspace-shell::before {
   content: "";
   position: fixed;
   left: 50%;
@@ -9813,11 +9813,11 @@ body.workspace-embedded.workspace-sync-overlay-active .workspace-shell::before {
   background: conic-gradient(from 0deg, #6d6af4, #9190f5, #d8dafc, #f2f3ff, #6d6af4);
   mask-image: radial-gradient(circle, transparent 0 46%, #000 47% 68%, transparent 69%);
   -webkit-mask-image: radial-gradient(circle, transparent 0 46%, #000 47% 68%, transparent 69%);
-  animation: workspace-sync-overlay-spin 1s linear infinite;
+  animation: workspace-blocking-overlay-spin 1s linear infinite;
   pointer-events: none;
 }
 
-@keyframes workspace-sync-overlay-spin {
+@keyframes workspace-blocking-overlay-spin {
   to {
     transform: translate(-50%, -50%) rotate(360deg);
   }

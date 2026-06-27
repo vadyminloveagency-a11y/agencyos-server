@@ -335,10 +335,15 @@ function resetWorkspaceRuntimeForProfile(profileId) {
 async function switchWorkspaceProfileFromShell(profileId) {
   const id = String(profileId || '');
   if (!id || id === activeProfileId) return;
-  setWorkspaceActionStatus('Switching profile...');
-  resetWorkspaceRuntimeForProfile(id);
-  await loadWorkspace();
-  setWorkspaceActionStatus('');
+  setWorkspaceBlockingOverlay(true, 'Switching profile...');
+  try {
+    setWorkspaceActionStatus('Switching profile...');
+    resetWorkspaceRuntimeForProfile(id);
+    await loadWorkspace();
+  } finally {
+    setWorkspaceActionStatus('');
+    setWorkspaceBlockingOverlay(false);
+  }
 }
 
 window.addEventListener('message', event => {
@@ -378,7 +383,6 @@ function updateProfileSyncStatus(message = '', status = {}) {
 
 function setProfileSyncRunning(active, message = '') {
   workspaceProfileSyncRunning = active === true;
-  document.body.classList.toggle('workspace-sync-overlay-active', workspaceProfileSyncRunning);
   if (refreshBtn) {
     refreshBtn.classList.toggle('syncing', workspaceProfileSyncRunning);
     refreshBtn.setAttribute('aria-busy', workspaceProfileSyncRunning ? 'true' : 'false');
@@ -396,9 +400,19 @@ function setProfileSyncRunning(active, message = '') {
   }
 }
 
+function setWorkspaceBlockingOverlay(active, message = '') {
+  const enabled = active === true;
+  document.body.classList.toggle('workspace-blocking-overlay-active', enabled);
+  document.body.dataset.blockingOverlayMessage = enabled
+    ? (String(message || '').trim() || 'Loading Inbox...')
+    : '';
+}
+
 function setWorkspaceActionStatus(message = '', button = null) {
   const text = String(message || '').trim();
-  document.body.dataset.syncOverlayMessage = text || (workspaceProfileSyncRunning ? 'Syncing Dream Inbox...' : '');
+  if (document.body.classList.contains('workspace-blocking-overlay-active')) {
+    document.body.dataset.blockingOverlayMessage = text || 'Loading Inbox...';
+  }
   if (button) button.title = text || button.getAttribute('aria-label') || button.textContent || 'Action';
   if (workspaceProfileSyncRunning && refreshBtn) {
     refreshBtn.title = text || 'Syncing Dream Singles';
