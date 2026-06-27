@@ -358,9 +358,7 @@ function resetWorkspaceRuntimeForProfile(profileId) {
 async function switchWorkspaceProfileFromShell(profileId) {
   const id = String(profileId || '');
   if (!id || id === activeProfileId) return;
-  setWorkspaceBlockingOverlay(true, 'Reloading');
   try {
-    setWorkspaceActionStatus('Reloading');
     resetWorkspaceRuntimeForProfile(id);
     await loadWorkspace();
     if (workspaceActiveSyncProfileIds.has(id)) {
@@ -368,7 +366,6 @@ async function switchWorkspaceProfileFromShell(profileId) {
     }
   } finally {
     setWorkspaceActionStatus('');
-    setWorkspaceBlockingOverlay(false);
   }
 }
 
