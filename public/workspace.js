@@ -3794,7 +3794,7 @@ async function loadWorkspace() {
     const result = await apiFetch('/api/workspace/inbox');
     workspaceLetters = result.letters || [];
     renderList();
-    if (workspaceListFilter === 'inbox' || workspaceAutoloadInbox || !workspaceLetters.length) {
+    if (workspaceAutoloadInbox || !workspaceLetters.length) {
       await ensureWorkspaceInboxAfterConnect({ force: workspaceAutoloadInbox || !workspaceLetters.length });
     }
     startWorkspaceInboxBackgroundScan();
