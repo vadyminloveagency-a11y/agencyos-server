@@ -2388,6 +2388,8 @@ async function connectProfileById(profileId, options = {}) {
     const result = await serverProfileRequestFor(id, 'server-connect', {
       body: { syncInbox: options.syncInbox !== false, maxPages: options.maxPages || 3 }
     });
+    await prepareLocalDreamProfile(id);
+    localStorage.setItem(`dream_team_lady_connected_${id}`, '1');
     const noReplyCount = agencyPendingLetterCount(result?.letters || []);
     setAgencyProfilePendingCount(id, noReplyCount, { playSound: options.playSound !== false });
     loadProfilePendingCount(id, {
@@ -2395,8 +2397,6 @@ async function connectProfileById(profileId, options = {}) {
       maxPages: options.maxPages || 3,
       playSound: options.playSound !== false
     }).catch(() => {});
-    await prepareLocalDreamProfile(id);
-    localStorage.setItem(`dream_team_lady_connected_${id}`, '1');
     return result;
   } finally {
     profileConnectingIds.delete(id);
@@ -7050,7 +7050,7 @@ agencyClearCacheBtn?.addEventListener('click', async () => {
     alert('Select a profile first.');
     return;
   }
-  const confirmed = confirm('Clear Message History cache for this profile?\n\nThis removes saved history cards and old media cache. Men in Inbox and Dream messages will not be deleted.');
+  const confirmed = confirm('Clear local letter cache for this profile?\n\nThis removes saved Workspace letters, history cards, media list, and downloaded attachments. Dream messages will not be deleted.');
   if (!confirmed) return;
   agencyClearCacheBtn.disabled = true;
   agencyClearCacheBtn.classList.add('is-clearing');
@@ -7070,7 +7070,7 @@ agencyClearCacheBtn?.addEventListener('click', async () => {
       url.searchParams.set('v', String(Date.now()));
       frame.setAttribute('src', `${url.pathname.replace(/^\//, '')}${url.search}`);
     });
-    alert(`Message History cache cleared.\n\nInbox letters kept: ${result?.cleared?.preservedLetters || 0}\nHistory/media items: ${result?.cleared?.media || 0}\nAttachments: ${mb} MB`);
+    alert(`Cache cleared.\n\nLetters: ${result?.cleared?.letters || 0}\nMedia items: ${result?.cleared?.media || 0}\nAttachments: ${mb} MB`);
   } catch (error) {
     alert(error.message || 'Could not clear cache.');
   } finally {
