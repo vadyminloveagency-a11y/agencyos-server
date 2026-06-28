@@ -1492,49 +1492,46 @@ body.workspace-dark-theme .workspace-list-pager button.active {
 
 .workspace-attachment-previews {
   margin-top: 10px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 280px));
+  display: block;
   gap: 12px;
 }
 
 .workspace-attachment-preview {
   margin: 0;
-  overflow: hidden;
-  border: 1px solid rgba(56, 189, 248, .24);
-  border-radius: 10px;
-  background: #101820;
+  width: fit-content;
+  max-width: 100%;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .workspace-attachment-preview img,
 .workspace-attachment-preview video {
-  width: 100%;
-  max-height: 360px;
+  width: auto;
+  max-width: min(100%, 420px);
+  max-height: min(520px, 62vh);
   display: block;
   object-fit: contain;
-  background: #071019;
+  background: transparent;
+  border-radius: 8px;
 }
 
 .workspace-attachment-preview figcaption {
-  padding: 7px 10px;
-  color: #9eb6ca;
-  font-size: 11px;
-  font-weight: 850;
+  display: none;
 }
 
 .workspace-attachment-preview.live {
-  min-height: 120px;
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: 8px;
+  min-height: 0;
+  display: block;
   padding: 0;
 }
 
 .workspace-live-attachment-slot {
-  width: 100%;
-  min-height: 120px;
-  display: grid;
-  place-items: center;
+  width: auto;
+  min-height: 0;
+  display: block;
+  background: transparent;
   color: #9eb6ca;
   font-size: 12px;
   font-weight: 850;
@@ -1542,11 +1539,13 @@ body.workspace-dark-theme .workspace-list-pager button.active {
 
 .workspace-live-attachment-slot img,
 .workspace-live-attachment-slot video {
-  width: 100%;
-  max-height: 360px;
+  width: auto;
+  max-width: min(100%, 420px);
+  max-height: min(520px, 62vh);
   display: block;
   object-fit: contain;
-  background: #071019;
+  background: transparent;
+  border-radius: 8px;
 }
 
 .workspace-live-attachment-slot button {
@@ -9754,6 +9753,52 @@ body.workspace-dark-theme.workspace-embedded .workspace-shell .workspace-message
   border-color: rgba(210, 112, 84, .62) !important;
   background: rgba(210, 112, 84, .18) !important;
   color: #f0c5b8 !important;
+}
+
+/* Inline letter media: no dark preview card, no black bars, no caption strip. */
+body.workspace-embedded .workspace-attachment-previews {
+  display: block !important;
+  grid-template-columns: none !important;
+  gap: 0 !important;
+}
+
+body.workspace-embedded .workspace-attachment-preview,
+body.workspace-embedded .workspace-attachment-preview.live {
+  width: fit-content !important;
+  max-width: 100% !important;
+  min-height: 0 !important;
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body.workspace-embedded .workspace-live-attachment-slot {
+  width: auto !important;
+  min-height: 0 !important;
+  display: block !important;
+  background: transparent !important;
+}
+
+body.workspace-embedded .workspace-attachment-preview img,
+body.workspace-embedded .workspace-attachment-preview video,
+body.workspace-embedded .workspace-live-attachment-slot img,
+body.workspace-embedded .workspace-live-attachment-slot video {
+  width: auto !important;
+  max-width: min(100%, 420px) !important;
+  max-height: min(520px, 62vh) !important;
+  display: block !important;
+  object-fit: contain !important;
+  background: transparent !important;
+  border-radius: 8px !important;
+}
+
+body.workspace-embedded .workspace-attachment-preview figcaption {
+  display: none !important;
 }
 
 /* Telegram-like reply composer: textarea grows with long text. */

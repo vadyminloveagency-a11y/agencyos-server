@@ -3176,7 +3176,7 @@ function renderAttachments(attachments = [], letter = {}) {
   const openText = `Open ${itemLabel}`;
   const hideText = `Hide ${itemLabel}`;
   return `
-    <details class="workspace-attachments">
+    <details class="workspace-attachments" open>
       <summary>
         <span class="workspace-attachments-open-label">${escapeHtml(hideText)}</span>
         <span class="workspace-attachments-closed-label">${escapeHtml(openText)}</span>
@@ -3192,7 +3192,6 @@ function renderAttachments(attachments = [], letter = {}) {
                   data-live-attachment-url="${escapeAttr(letter?.messageLink || letter?.sourceUrl || '')}">
                   <span>Loading ${escapeHtml(isVideo ? 'video' : 'photo')}...</span>
                 </div>
-                <figcaption>${escapeHtml(label)}</figcaption>
               </figure>`;
           }
           const directVideo = isVideo && /\.(?:mp4|webm|mov|m4v)(?:[?#]|$)/i.test(item.url);
@@ -3202,7 +3201,6 @@ function renderAttachments(attachments = [], letter = {}) {
           return directVideo
             ? `<figure class="workspace-attachment-preview video">
                 <video src="${escapeAttr(item.url)}"${fallbackAttr} controls preload="metadata"></video>
-                <figcaption>${escapeHtml(label)}</figcaption>
               </figure>`
             : isVideo
               ? `<figure class="workspace-attachment-preview file">
@@ -3211,7 +3209,6 @@ function renderAttachments(attachments = [], letter = {}) {
                 </figure>`
             : `<figure class="workspace-attachment-preview image">
                 <img src="${escapeAttr(item.url)}"${fallbackAttr} alt="${escapeAttr(label)}" loading="lazy" decoding="async">
-                <figcaption>${escapeHtml(label)}</figcaption>
               </figure>`;
         }).join('')}
       </div>
@@ -3401,6 +3398,7 @@ function renderDialog(group) {
   }
   restoreLetterStripScroll(group);
   restoreHistorySideScroll(group);
+  loadOpenWorkspaceAttachments(dialog);
   const replyLetter = selectedReplyLetterForGroup(group);
   const canReply = canReplyToLetter(replyLetter);
   const canLoadHistory = Boolean(canUseLetterForHistory(selectedLetter) ? selectedLetter : historyLetterCandidatesForGroup(group)[0]);
@@ -4635,12 +4633,21 @@ dialog.addEventListener('click', event => {
 dialog.addEventListener('toggle', event => {
   const details = event.target;
   if (!(details instanceof HTMLDetailsElement) || !details.matches('.workspace-attachments') || !details.open) return;
-  details.querySelectorAll('.workspace-live-attachment-slot').forEach(slot => {
-    loadWorkspaceLiveAttachmentSlot(slot).catch(error => {
-      slot.innerHTML = `<button type="button" data-live-attachment-retry>${escapeHtml(error.message || 'Try again')}</button>`;
+  loadOpenWorkspaceAttachments(details);
+}, true);
+
+function loadOpenWorkspaceAttachments(root = dialog) {
+  const openDetails = root instanceof HTMLDetailsElement && root.matches('.workspace-attachments[open]')
+    ? [root]
+    : Array.from(root.querySelectorAll('.workspace-attachments[open]'));
+  openDetails.forEach(details => {
+    details.querySelectorAll('.workspace-live-attachment-slot').forEach(slot => {
+      loadWorkspaceLiveAttachmentSlot(slot).catch(error => {
+        slot.innerHTML = `<button type="button" data-live-attachment-retry>${escapeHtml(error.message || 'Try again')}</button>`;
+      });
     });
   });
-}, true);
+}
 
 menList.addEventListener('keydown', event => {
   if (event.key !== 'Enter' && event.key !== ' ') return;
