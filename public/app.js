@@ -6884,12 +6884,23 @@ async function runAgencyNavigation(action) {
 
 agencyBackBtn?.addEventListener('click', () => runAgencyNavigation('back'));
 agencyRefreshBtn?.addEventListener('click', () => runAgencyNavigation('refresh'));
+function clearAgencyWorkspaceHistoryStorage(profileId) {
+  const prefix = `dream_workspace_${profileId || 'default'}_message_history_`;
+  [sessionStorage, localStorage].forEach(storage => {
+    try {
+      Object.keys(storage)
+        .filter(key => key.startsWith(prefix))
+        .forEach(key => storage.removeItem(key));
+    } catch {}
+  });
+}
+
 agencyClearCacheBtn?.addEventListener('click', async () => {
   if (!activeProfileId) {
     alert('Select a profile first.');
     return;
   }
-  const confirmed = confirm('Clear local letter cache on this computer?\n\nThis will remove saved Workspace letters, media list, and downloaded attachments for the selected profile. Dream messages will not be deleted.');
+  const confirmed = confirm('Clear Message History cache for this profile?\n\nThis removes saved history cards and old media cache. Men in Inbox and Dream messages will not be deleted.');
   if (!confirmed) return;
   agencyClearCacheBtn.disabled = true;
   agencyClearCacheBtn.classList.add('is-clearing');
@@ -6901,13 +6912,15 @@ agencyClearCacheBtn?.addEventListener('click', async () => {
     });
     const bytes = Number(result?.cleared?.attachmentBytes || 0);
     const mb = bytes ? Math.round((bytes / 1024 / 1024) * 10) / 10 : 0;
-    alert(`Cache cleared.\n\nLetters: ${result?.cleared?.letters || 0}\nMedia items: ${result?.cleared?.media || 0}\nAttachments: ${mb} MB`);
+    clearAgencyWorkspaceHistoryStorage(activeProfileId);
     [workspaceEmbedFrame, agencyInboxFrame].forEach(frame => {
       if (!frame) return;
+      frame.contentWindow?.postMessage({ source: 'agencyos', type: 'CLEAR_WORKSPACE_HISTORY_CACHE' }, '*');
       const url = new URL(frame.getAttribute('src') || 'workspace.html?embedded=1', window.location.href);
       url.searchParams.set('v', String(Date.now()));
       frame.setAttribute('src', `${url.pathname.replace(/^\//, '')}${url.search}`);
     });
+    alert(`Message History cache cleared.\n\nInbox letters kept: ${result?.cleared?.preservedLetters || 0}\nHistory/media items: ${result?.cleared?.media || 0}\nAttachments: ${mb} MB`);
   } catch (error) {
     alert(error.message || 'Could not clear cache.');
   } finally {

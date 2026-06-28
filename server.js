@@ -6710,7 +6710,17 @@ app.post('/api/workspace/clear-cache', (req, res) => {
   const oldLetters = Array.isArray(profile.workspaceInbox) ? profile.workspaceInbox.length : 0;
   const oldMedia = Array.isArray(profile.workspaceMediaGallery) ? profile.workspaceMediaGallery.length : 0;
   const removedBytes = removeWorkspaceAttachmentCacheForProfile(req.profileId);
-  profile.workspaceInbox = [];
+  let cleanedLetters = 0;
+  profile.workspaceInbox = Array.isArray(profile.workspaceInbox)
+    ? profile.workspaceInbox.map(letter => {
+        const oldAttachments = Array.isArray(letter?.attachments) ? letter.attachments : [];
+        if (oldAttachments.length) cleanedLetters += 1;
+        return {
+          ...letter,
+          attachments: workspaceLiveAttachmentMarkers(oldAttachments, letter)
+        };
+      })
+    : [];
   profile.workspaceMediaGallery = [];
   profile.workspaceMediaGallerySyncedAt = '';
   profile.updatedAt = new Date().toISOString();
@@ -6718,7 +6728,9 @@ app.post('/api/workspace/clear-cache', (req, res) => {
   res.json({
     ok: true,
     cleared: {
-      letters: oldLetters,
+      letters: 0,
+      preservedLetters: oldLetters,
+      cleanedLetters,
       media: oldMedia,
       attachmentBytes: removedBytes
     }

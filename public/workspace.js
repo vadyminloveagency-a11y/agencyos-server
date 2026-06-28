@@ -1790,6 +1790,32 @@ function saveWorkspaceHistoryCache(group, cache) {
   } catch {}
 }
 
+function clearWorkspaceHistoryCache(group = null) {
+  const key = group ? workspaceHistoryCacheKey(group) : '';
+  if (key) workspaceHistoryCache.delete(key);
+  const prefixes = key
+    ? [workspaceHistoryStorageKey(group)]
+    : [`${workspaceSessionPrefix}_message_history_`];
+  [sessionStorage, localStorage].forEach(storage => {
+    try {
+      Object.keys(storage)
+        .filter(storageKey => prefixes.some(prefix => prefix && storageKey.startsWith(prefix)))
+        .forEach(storageKey => storage.removeItem(storageKey));
+    } catch {}
+  });
+  if (!key) workspaceHistoryCache.clear();
+}
+
+window.addEventListener('message', event => {
+  if (event.data?.source !== 'agencyos' || event.data?.type !== 'CLEAR_WORKSPACE_HISTORY_CACHE') return;
+  clearWorkspaceHistoryCache();
+  workspaceSelectedHistoryKey = '';
+  workspaceSelectedLetterKey = '';
+  workspaceHistoryPage = 1;
+  sessionStorage.setItem('dream_workspace_history_page', '1');
+  renderCurrentWorkspaceState();
+});
+
 function hashString(value = '') {
   let hash = 2166136261;
   for (let i = 0; i < String(value).length; i += 1) {
@@ -2982,6 +3008,13 @@ async function loadWorkspaceHistoryIntoPanel(group, options = {}) {
   let targetGroup = group || findGroup(workspaceSelectedId);
   const key = workspaceHistoryCacheKey(targetGroup);
   if (!targetGroup || !key) return null;
+  if (options.force === true) {
+    clearWorkspaceHistoryCache(targetGroup);
+    workspaceSelectedHistoryKey = '';
+    workspaceSelectedLetterKey = '';
+    workspaceHistoryPage = 1;
+    sessionStorage.setItem('dream_workspace_history_page', '1');
+  }
   const cachedHistory = readWorkspaceHistoryCache(targetGroup);
   if (!options.force && cachedHistory) return cachedHistory;
   if (workspaceHistoryLoadingIds.has(key)) return cachedHistory || null;
@@ -3446,8 +3479,8 @@ function selectLetterGroup(id, letterKey = '') {
   rememberSelectedDialog();
   renderList();
   renderDialog(nextGroup);
-  if (workspaceListFilter === 'inbox' && previousSelectedId !== workspaceSelectedId) {
-    loadWorkspaceHistoryIntoPanel(nextGroup, { silent: true });
+  if (workspaceListFilter === 'inbox' && !letterKey) {
+    loadWorkspaceHistoryIntoPanel(nextGroup, { force: true, silent: true });
   }
   if (workspaceListFilter === 'inbox' && letterKey) loadSelectedLetterBody();
   return previousSelectedId !== workspaceSelectedId || previousSelectedLetterKey !== workspaceSelectedLetterKey;
