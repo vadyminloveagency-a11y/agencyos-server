@@ -2771,7 +2771,7 @@ function renderConversation(letter, fallbackName, fallbackPhotoUrl = '') {
       };
     })
     .filter(Boolean);
-  const attachmentsHtml = renderAttachments(letter?.attachments);
+  const attachmentsHtml = renderAttachments(letter?.attachments, letter);
 
   if (!conversation.length) {
     const fallbackDirection = letterDirection === 'outgoing' ? 'outgoing' : 'incoming';
@@ -3054,15 +3054,16 @@ async function openWorkspaceMessageHistory(triggerButton = null) {
   await loadWorkspaceHistoryIntoPanel(group, { force: true, button: triggerButton || historyBtn });
 }
 
-function renderAttachments(attachments = []) {
+function renderAttachments(attachments = [], letter = {}) {
   const cleanAttachments = (Array.isArray(attachments) ? attachments : [])
     .map(item => ({
       type: String(item?.type || '').toLowerCase(),
       url: String(item?.localUrl || item?.url || item?.src || '').trim(),
       sourceUrl: String(item?.sourceUrl || '').trim(),
-      label: String(item?.label || '').trim()
+      label: String(item?.label || '').trim(),
+      live: item?.live === true
     }))
-    .filter(item => item.url)
+    .filter(item => item.url || item.live)
     .slice(0, 12);
 
   if (!cleanAttachments.length) return '';
@@ -3089,6 +3090,14 @@ function renderAttachments(attachments = []) {
         ${typedAttachments.map((item, index) => {
           const isVideo = item.kind === 'video';
           const label = item.label || (item.kind === 'video' ? 'Video' : (item.kind === 'photo' ? 'Photo' : 'File'));
+          if (item.live || letter?.messageLink || letter?.sourceUrl) {
+            return `<figure class="workspace-attachment-preview live">
+                <button type="button" data-live-attachment-kind="${escapeAttr(isVideo ? 'video' : 'image')}" data-live-attachment-url="${escapeAttr(letter?.messageLink || letter?.sourceUrl || '')}">
+                  ${escapeHtml(isVideo ? 'Open video' : 'Open photo')}
+                </button>
+                <figcaption>${escapeHtml(label)}</figcaption>
+              </figure>`;
+          }
           const directVideo = isVideo && /\.(?:mp4|webm|mov|m4v)(?:[?#]|$)/i.test(item.url);
           const fallbackAttr = item.sourceUrl && item.sourceUrl !== item.url
             ? ` data-fallback-src="${escapeAttr(item.sourceUrl)}"`
@@ -3111,6 +3120,66 @@ function renderAttachments(attachments = []) {
       </div>
     </details>
   `;
+}
+
+function closeWorkspaceLiveMedia() {
+  document.querySelector('.workspace-live-media-lightbox')?.remove();
+}
+
+function showWorkspaceLiveMedia(item = {}) {
+  closeWorkspaceLiveMedia();
+  const url = String(item.url || item.src || '').trim();
+  if (!url) throw new Error('Dream did not return a media link');
+  const isVideo = item.type === 'video' || /\.(?:mp4|webm|mov|m4v)(?:[?#]|$)/i.test(url);
+  const label = item.label || (isVideo ? 'Video' : 'Photo');
+  const overlay = document.createElement('div');
+  overlay.className = 'workspace-live-media-lightbox';
+  overlay.innerHTML = `
+    <button type="button" class="workspace-live-media-close" aria-label="Close">x</button>
+    <div class="workspace-live-media-frame">
+      ${isVideo
+        ? `<video src="${escapeAttr(url)}" controls autoplay playsinline></video>`
+        : `<img src="${escapeAttr(url)}" alt="${escapeAttr(label)}">`}
+      <div class="workspace-live-media-label">${escapeHtml(label)}</div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+async function openWorkspaceLiveAttachment(button) {
+  const kind = String(button?.dataset?.liveAttachmentKind || 'image').toLowerCase() === 'video' ? 'video' : 'image';
+  const messageLink = String(button?.dataset?.liveAttachmentUrl || '').trim();
+  const group = findGroup(workspaceSelectedId);
+  const letter = selectedLetterFromGroup(group);
+  const targetUrl = messageLink || String(letter?.messageLink || '').trim();
+  if (!targetUrl) throw new Error('Letter link is missing');
+  const oldText = button.textContent;
+  button.disabled = true;
+  button.textContent = kind === 'video' ? 'Opening video...' : 'Opening photo...';
+  try {
+    const response = await apiFetch('/api/workspace/read-letter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sourceProfileId: activeProfileId,
+        messageLink: targetUrl,
+        id: letter?.id || group?.id || '',
+        name: letter?.name || group?.name || '',
+        direction: letter?.direction === 'outgoing' ? 'outgoing' : 'incoming',
+        mediaOnly: true
+      })
+    }, 70000);
+    const attachments = Array.isArray(response?.letter?.attachments) ? response.letter.attachments : [];
+    const item = attachments.find(attachment => {
+      const type = String(attachment?.type || '').toLowerCase() === 'video' ? 'video' : 'image';
+      return type === kind && String(attachment?.url || '').trim();
+    });
+    if (!item) throw new Error(kind === 'video' ? 'Video was not found in Dream letter' : 'Photo was not found in Dream letter');
+    showWorkspaceLiveMedia(item);
+  } finally {
+    button.disabled = false;
+    button.textContent = oldText;
+  }
 }
 
 function renderDialog(group) {
@@ -4442,11 +4511,31 @@ menList.addEventListener('click', event => {
 });
 
 dialog.addEventListener('click', event => {
+  const liveAttachment = event.target.closest('[data-live-attachment-kind]');
+  if (liveAttachment) {
+    event.preventDefault();
+    event.stopPropagation();
+    openWorkspaceLiveAttachment(liveAttachment).catch(error => alert(error.message || 'Could not open media'));
+    return;
+  }
   const translateButton = event.target.closest('.workspace-translate-message');
   if (!translateButton) return;
   event.preventDefault();
   event.stopPropagation();
   translateMessage(translateButton);
+});
+
+document.addEventListener('click', event => {
+  if (
+    event.target.closest?.('.workspace-live-media-close') ||
+    event.target.classList?.contains('workspace-live-media-lightbox')
+  ) {
+    closeWorkspaceLiveMedia();
+  }
+});
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closeWorkspaceLiveMedia();
 });
 
 menList.addEventListener('keydown', event => {

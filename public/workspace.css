@@ -1521,6 +1521,80 @@ body.workspace-dark-theme .workspace-list-pager button.active {
   font-weight: 850;
 }
 
+.workspace-attachment-preview.live {
+  min-height: 96px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 14px;
+}
+
+.workspace-attachment-preview.live button {
+  min-width: 132px;
+  min-height: 34px;
+  border: 1px solid rgba(251, 146, 60, .6);
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.workspace-attachment-preview.live button:disabled {
+  cursor: wait;
+  opacity: .7;
+}
+
+.workspace-live-media-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483600;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgba(3, 7, 18, .78);
+}
+
+.workspace-live-media-frame {
+  max-width: min(92vw, 1100px);
+  max-height: 92vh;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.workspace-live-media-frame img,
+.workspace-live-media-frame video {
+  max-width: min(92vw, 1100px);
+  max-height: 84vh;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #020617;
+}
+
+.workspace-live-media-label {
+  color: #e5e7eb;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.workspace-live-media-close {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, .35);
+  border-radius: 50%;
+  background: rgba(15, 23, 42, .9);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
 .workspace-message-loading {
   max-width: 860px;
   padding: 10px 14px;

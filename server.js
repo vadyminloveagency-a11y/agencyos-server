@@ -534,7 +534,7 @@ function workspaceAttachmentLocalFileExists(url = '') {
 function workspaceMediaUrlLooksPageChrome(url = '') {
   const marker = String(url || '').toLowerCase();
   if (!marker) return true;
-  return /logo|banner|sprite|icon|captcha|avatar|placeholder|loader|spinner|emoji|smil|emoticon|profile-picture|profile_avatar|profile-avatar|header|footer|navbar|navigation|menu|button|background|\/(?:assets|static|css|js|fonts?)\/|\/(?:img|image|images|icons?)\/(?:common|layout|site|header|footer|logo|banner|sprite|icon|btn|button|bg|background|loader|spinner)/i.test(marker);
+  return /logo|banner|sprite|icon|captcha|avatar|placeholder|loader|spinner|emoji|smil|emoticon|envelope|email|message[-_]?read|message[-_]?sent|no[-_]?photo|default[-_]?photo|profile-picture|profile_avatar|profile-avatar|header|footer|navbar|navigation|menu|button|background|\/(?:assets|static|css|js|fonts?)\/|\/(?:img|image|images|icons?)\/(?:common|layout|site|header|footer|logo|banner|sprite|icon|btn|button|bg|background|loader|spinner)/i.test(marker);
 }
 
 function workspaceMediaUrlLooksLikeAttachment(url = '', type = 'image') {
@@ -601,6 +601,20 @@ function mergeSavedWorkspaceLetterDetails(liveLetter = {}, savedLetter = null) {
       text: bodyText
     }] : [])
   };
+}
+
+function workspaceLiveAttachmentMarkers(attachments = [], fallback = {}) {
+  const clean = cleanWorkspaceAttachments(attachments);
+  const hasVideo = clean.some(item => item.type === 'video');
+  const hasImage = clean.some(item => item.type !== 'video');
+  const markers = [];
+  if (hasImage || fallback.hasPhoto === true || fallback.attachmentsHint === true) {
+    markers.push({ type: 'image', live: true, label: 'Photo' });
+  }
+  if (hasVideo || fallback.hasVideo === true) {
+    markers.push({ type: 'video', live: true, label: 'Video' });
+  }
+  return markers;
 }
 
 function removeWorkspaceAttachmentCacheForProfile(profileId = '') {
@@ -6737,18 +6751,16 @@ app.post('/api/workspace/read-letter', async (req, res) => {
       String(req.body?.id || '').trim(),
       String(req.body?.direction || '').trim()
     );
+    if (req.body?.mediaOnly === true) {
+      const attachments = cleanWorkspaceAttachments(letter.attachments || []);
+      return res.json({ ok: true, letter: { messageLink: rawUrl, attachments } });
+    }
     letter = mergeSavedWorkspaceLetterDetails(letter, savedLetter);
     if (letter.requiresLogin) throw new Error('Dream Singles login is required');
     if (!letter.bodyText && !letter.conversation?.length && !letter.attachments?.length) {
       throw new Error('Could not read letter text');
     }
-    if (letter.attachments?.length) {
-      letter.attachments = await cacheWorkspaceAttachments(
-        req.profileId,
-        workspaceMessageIdentity(url.href) || crypto.createHash('sha1').update(url.href).digest('hex').slice(0, 20),
-        letter.attachments
-      );
-    }
+    letter.attachments = workspaceLiveAttachmentMarkers(letter.attachments || [], savedLetter || {});
     res.json({ ok: true, letter: { ...letter, messageLink: rawUrl } });
   } catch (error) {
     const fallbackDb = readDb();
@@ -6760,6 +6772,7 @@ app.post('/api/workspace/read-letter', async (req, res) => {
       attachments: [],
       conversation: []
     }, savedLetter);
+    fallbackLetter.attachments = workspaceLiveAttachmentMarkers([], savedLetter || fallbackLetter);
     if (fallbackLetter.bodyText || fallbackLetter.conversation?.length || fallbackLetter.attachments?.length) {
       return res.json({ ok: true, letter: { ...fallbackLetter, messageLink: rawUrl, liveError: error.message || '' } });
     }
@@ -7360,10 +7373,9 @@ app.post('/api/workspace/letter', async (req, res) => {
   const nextDateText = hasWorkspaceClock(incomingDateText)
     ? incomingDateText
     : (hasWorkspaceClock(currentDateText) ? currentDateText : (dateFromWorkspaceKey(key) || incomingDateText || currentDateText));
-  const attachments = await cacheWorkspaceAttachments(
-    req.profileId,
-    key,
-    incoming.attachments?.length ? incoming.attachments : letters[index].attachments
+  const attachments = workspaceLiveAttachmentMarkers(
+    incoming.attachments?.length ? incoming.attachments : letters[index].attachments,
+    letters[index]
   );
   const conversation = Array.isArray(incoming.conversation)
     ? incoming.conversation.map(item => ({
