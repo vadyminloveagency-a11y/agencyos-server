@@ -160,6 +160,7 @@ const WORKSPACE_THEME_KEY = 'dream_global_theme';
 const workspaceUrlParams = new URLSearchParams(window.location.search);
 const workspaceEmbedded = workspaceUrlParams.get('embedded') === '1';
 const workspaceAutoloadInbox = workspaceUrlParams.get('autoloadInbox') === '1';
+const workspaceClearSelectionOnLoad = workspaceUrlParams.get('clearSelection') === '1';
 const savedWorkspaceListFilter = sessionStorage.getItem(`${workspaceSessionPrefix}_list_filter`) ||
   sessionStorage.getItem('dream_workspace_list_filter') ||
   'inbox';
@@ -321,9 +322,13 @@ searchInput?.addEventListener('pointerdown', () => {
   searchInput.removeAttribute('readonly');
 }, { once: true });
 [50, 250, 800, 1600].forEach(delay => window.setTimeout(clearWorkspaceSearchAutofill, delay));
-workspaceSelectedId = sessionStorage.getItem(`${workspaceSessionPrefix}_selected_id`) || localStorage.getItem(`${workspaceSessionPrefix}_selected_id`) || '';
-workspaceSelectedLetterKey = sessionStorage.getItem(`${workspaceSessionPrefix}_selected_letter_key`) || localStorage.getItem(`${workspaceSessionPrefix}_selected_letter_key`) || '';
-workspaceSelectedHistoryKey = sessionStorage.getItem(`${workspaceSessionPrefix}_selected_history_key`) || localStorage.getItem(`${workspaceSessionPrefix}_selected_history_key`) || '';
+if (workspaceClearSelectionOnLoad) {
+  clearSelectedDialog();
+} else {
+  workspaceSelectedId = sessionStorage.getItem(`${workspaceSessionPrefix}_selected_id`) || localStorage.getItem(`${workspaceSessionPrefix}_selected_id`) || '';
+  workspaceSelectedLetterKey = sessionStorage.getItem(`${workspaceSessionPrefix}_selected_letter_key`) || localStorage.getItem(`${workspaceSessionPrefix}_selected_letter_key`) || '';
+  workspaceSelectedHistoryKey = sessionStorage.getItem(`${workspaceSessionPrefix}_selected_history_key`) || localStorage.getItem(`${workspaceSessionPrefix}_selected_history_key`) || '';
+}
 
 function resetWorkspaceRuntimeForProfile(profileId) {
   activeProfileId = String(profileId || '');
@@ -662,7 +667,7 @@ function hasNewIncomingActivity(beforeLetters = [], afterLetters = workspaceLett
 }
 
 function isFreshPendingIncomingLetter(letter) {
-  const threeMonthsAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
+  const threeMonthsAgo = Date.now() - 92 * 24 * 60 * 60 * 1000;
   const sortDate = parseDateValue(letter?.dateText);
   return letter?.direction !== 'outgoing' &&
     (letter?.unread === true || letter?.unanswered === true) &&
@@ -982,7 +987,7 @@ function isRecentReadLetter(letter) {
 }
 
 function isRecentUnansweredInboxLetter(letter) {
-  const threeMonthsAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
+  const threeMonthsAgo = Date.now() - 92 * 24 * 60 * 60 * 1000;
   return letter?.direction !== 'outgoing' &&
     (letter?.unread === true || letter?.unanswered === true) &&
     Number(letter.sortDate || 0) >= threeMonthsAgo;
@@ -1000,7 +1005,7 @@ function recentUnansweredInboxCount(letters = workspaceLetters) {
 }
 
 function isNoReplyEligibleLetter(letter) {
-  const threeMonthsAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
+  const threeMonthsAgo = Date.now() - 92 * 24 * 60 * 60 * 1000;
   const sortDate = Number(letter?.sortDate || 0);
   return letter?.direction !== 'outgoing' &&
     (letter?.unread === true || letter?.unanswered === true) &&

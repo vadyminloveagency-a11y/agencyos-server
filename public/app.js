@@ -12,6 +12,7 @@ let pendingAgencyProfileChoicePanel = '';
 const profileConnectingIds = new Set();
 const profilePendingCounts = new Map();
 const profilePendingLoadingIds = new Set();
+const profilePendingSoundKeys = new Map();
 let profilePendingCountsLoadedAt = 0;
 let profilePendingCountsTimer = null;
 const AGENCY_PANEL_KEY = 'agencyos_active_panel';
@@ -1627,6 +1628,7 @@ function reloadWorkspaceEmbedForProfile(profileId, reason = 'switch-profile') {
     const url = new URL('workspace.html', window.location.href);
     url.searchParams.set('embedded', '1');
     url.searchParams.set('autoloadInbox', '0');
+    url.searchParams.set('clearSelection', '1');
     url.searchParams.set('profileId', id);
     url.searchParams.set('v', `20260629-profile-${reason}-${Date.now()}`);
     frame.src = `workspace.html?${url.searchParams.toString()}`;
@@ -2174,7 +2176,7 @@ function connectedProfileIds() {
 }
 
 function agencyPendingLetterCount(letters = []) {
-  const threeMonthsAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
+  const threeMonthsAgo = Date.now() - 92 * 24 * 60 * 60 * 1000;
   const seen = new Set();
   for (const letter of Array.isArray(letters) ? letters : []) {
     if (String(letter?.direction || 'incoming') === 'outgoing') continue;
@@ -2198,6 +2200,22 @@ function playAgencyInboxSound() {
   });
 }
 
+function setAgencyProfilePendingCount(profileId, noReplyCount, options = {}) {
+  const id = String(profileId || '');
+  if (!id) return;
+  const count = Math.max(0, Math.round(Number(noReplyCount) || 0));
+  const previous = Number(profilePendingCounts.get(id)?.noReplyCount || 0) || 0;
+  profilePendingCounts.set(id, { noReplyCount: count, inboxCount: count });
+  renderSidebarProfileDock();
+  if (options.playSound && count > 0) {
+    const soundKey = `${id}:${count}:${new Date().toISOString().slice(0, 10)}`;
+    if (profilePendingSoundKeys.get(id) !== soundKey || previous === 0) {
+      profilePendingSoundKeys.set(id, soundKey);
+      playAgencyInboxSound();
+    }
+  }
+}
+
 function unlockAgencyInboxSound() {
   const wasMuted = agencyInboxSound.muted;
   agencyInboxSound.muted = true;
@@ -2215,20 +2233,28 @@ function unlockAgencyInboxSound() {
 document.addEventListener('pointerdown', unlockAgencyInboxSound, { capture: true });
 document.addEventListener('keydown', unlockAgencyInboxSound, { capture: true });
 
-async function loadProfilePendingCount(profileId) {
+async function loadProfilePendingCount(profileId, options = {}) {
   const id = String(profileId || '');
   if (!id || profilePendingLoadingIds.has(id)) return;
   profilePendingLoadingIds.add(id);
   try {
-    const response = await fetch('/api/workspace/inbox', {
-      headers: { 'X-Profile-ID': id }
-    });
+    const headers = new Headers({ 'Content-Type': 'application/json' });
+    headers.set('X-Profile-ID', id);
+    const response = options.scan === true
+      ? await fetch('/api/workspace/scan-inbox', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            sourceProfileId: id,
+            maxPages: options.maxPages || 3,
+            syncFavorites: false
+          })
+        })
+      : await fetch('/api/workspace/inbox', { headers });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || 'Could not load inbox count');
     const noReplyCount = agencyPendingLetterCount(result.letters || []);
-    const previous = Number(profilePendingCounts.get(id)?.noReplyCount || 0) || 0;
-    profilePendingCounts.set(id, { noReplyCount, inboxCount: noReplyCount });
-    if (noReplyCount > 0) playAgencyInboxSound();
+    setAgencyProfilePendingCount(id, noReplyCount, { playSound: options.playSound === true });
   } catch (error) {
     console.warn(`Could not load pending inbox count for ${id}`, error);
   } finally {
@@ -2358,8 +2384,12 @@ async function connectProfileById(profileId, options = {}) {
       body: { syncInbox: options.syncInbox !== false, maxPages: options.maxPages || 3 }
     });
     const noReplyCount = agencyPendingLetterCount(result?.letters || []);
-    profilePendingCounts.set(id, { noReplyCount, inboxCount: noReplyCount });
-    if (noReplyCount > 0) playAgencyInboxSound();
+    setAgencyProfilePendingCount(id, noReplyCount, { playSound: options.playSound !== false });
+    loadProfilePendingCount(id, {
+      scan: true,
+      maxPages: options.maxPages || 3,
+      playSound: options.playSound !== false
+    }).catch(() => {});
     await prepareLocalDreamProfile(id);
     localStorage.setItem(`dream_team_lady_connected_${id}`, '1');
     return result;
@@ -2388,7 +2418,7 @@ async function switchWorkingProfile(profileId, options = {}) {
   if (!profile) return;
   if (profileSwitchInProgress && activeProfileId === id) return;
   profileSwitchInProgress = true;
-  setProfileSwitchOverlay(true, profile);
+  setProfileSwitchOverlay(false);
   try {
     activeProfileId = id;
     localStorage.setItem('dream_crm_profile_id', id);
@@ -2461,6 +2491,7 @@ async function disconnectProfileById(profileId, reason = 'sidebar-profile-power'
     });
     localStorage.removeItem(`dream_team_lady_connected_${id}`);
     profilePendingCounts.delete(id);
+    profilePendingSoundKeys.delete(id);
     if (String(activeProfileId) === id) {
       ladyConnected = false;
       clearDisconnectedLady(id, reason);
@@ -2644,11 +2675,7 @@ window.addEventListener('message', event => {
   if (event.data?.source === 'dream-workspace' && event.data?.type === 'WORKSPACE_PENDING_COUNTS' && workspaceCommandFrame) {
     const id = String(event.data.profileId || '');
     if (id) {
-      profilePendingCounts.set(id, {
-        noReplyCount: Math.max(0, Number(event.data.noReplyCount || 0) || 0),
-        inboxCount: Math.max(0, Number(event.data.inboxCount || 0) || 0)
-      });
-      renderSidebarProfileDock();
+      setAgencyProfilePendingCount(id, Math.max(Number(event.data.noReplyCount || 0), Number(event.data.inboxCount || 0)), { playSound: false });
     }
     return;
   }
@@ -8757,9 +8784,8 @@ async function connectSelectedLady() {
       body: { syncInbox: true, maxPages: 3 }
     });
     const noReplyCount = agencyPendingLetterCount(result?.letters || []);
-    profilePendingCounts.set(String(activeProfileId), { noReplyCount, inboxCount: noReplyCount });
-    if (noReplyCount > 0) playAgencyInboxSound();
-    renderSidebarProfileDock();
+    setAgencyProfilePendingCount(activeProfileId, noReplyCount, { playSound: true });
+    loadProfilePendingCount(activeProfileId, { scan: true, maxPages: 3, playSound: true }).catch(() => {});
     await prepareLocalDreamProfile(activeProfileId);
     ladyConnected = true;
     localStorage.setItem(`dream_team_lady_connected_${activeProfileId}`, '1');
