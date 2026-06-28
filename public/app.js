@@ -2183,7 +2183,12 @@ function agencyPendingLetterCount(letters = []) {
     if (letter?.unread !== true && letter?.unanswered !== true) continue;
     const time = Date.parse(String(letter?.dateText || '').replace(' ', 'T'));
     if (!time || Number.isNaN(time) || time < threeMonthsAgo) continue;
-    const key = String(letter?.messageLink || letter?.key || `${letter?.id || ''}:${letter?.dateText || ''}:${letter?.snippet || ''}`).trim();
+    const id = String(letter?.id || letter?.profileId || '').replace(/\D+/g, '') || String(letter?.id || letter?.profileId || '').trim();
+    const date = String(letter?.dateText || '').trim().toLowerCase();
+    const snippet = String(letter?.snippet || letter?.bodyText || letter?.text || '').replace(/\s+/g, ' ').trim().slice(0, 160).toLowerCase();
+    const key = (id && date && snippet)
+      ? `${id}:${date}:${snippet}`
+      : String(letter?.messageLink || letter?.key || `${id}:${date}`).trim();
     if (key) seen.add(key);
   }
   return seen.size;
@@ -2322,7 +2327,7 @@ function renderSidebarProfileDock() {
         const initial = String(name || profile.id || '?').slice(0, 1).toUpperCase();
         const statusText = connecting ? 'Logging in' : connected ? 'Online' : 'Click to login';
         const pending = profilePendingCounts.get(String(profile.id)) || {};
-        const noReplyCount = Math.max(0, Number(pending.noReplyCount || 0) || 0);
+        const noReplyCount = connected && !connecting ? Math.max(0, Number(pending.noReplyCount || 0) || 0) : 0;
         return `
           <div class="sidebar-profile-dock-item ${active ? 'active' : ''} ${connected ? 'online' : ''} ${connecting ? 'connecting' : ''} ${active && connected ? 'active-online' : ''}" data-profile-id="${escapeAttr(profile.id)}" title="${escapeAttr(name)} - ${escapeAttr(profile.id)}">
             <span class="sidebar-profile-dock-avatar-wrap">

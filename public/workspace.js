@@ -634,7 +634,8 @@ function incomingLetterIdentity(letter) {
   const urlKey = url.match(/\/members\/messaging\/read\/([^/?#]+)/i)?.[1] || url;
   const id = normalizeWorkspaceProfileId(letter.id || letter.profileId || '');
   const date = String(letter.dateText || '').trim().toLowerCase();
-  const snippet = String(letter.snippet || letter.bodyText || '').trim().slice(0, 120).toLowerCase();
+  const snippet = String(letter.snippet || letter.bodyText || letter.text || '').replace(/\s+/g, ' ').trim().slice(0, 160).toLowerCase();
+  if (id && date && snippet) return `${id}:${date}:${snippet}`;
   return `${id}:${urlKey || date}:${snippet}`.trim();
 }
 
@@ -1085,8 +1086,10 @@ function renderList() {
   hint.textContent = '';
   const allGroups = groupedLetters();
   const readGroups = groupedLetters(true);
-  const inboxUnansweredCount = recentUnansweredInboxCount(workspaceLetters);
-  const noReplyCount = noReplyEligibleCount(workspaceLetters);
+  const inboxUnansweredCount = allGroups.reduce((total, group) =>
+    total + Math.max(Number(group.unreadCount || 0), Number(group.unansweredCount || 0)), 0);
+  const noReplyCount = allGroups.reduce((total, group) =>
+    total + Number(group.unansweredCount || 0), 0);
   postWorkspacePendingCounts();
   const readCount = readGroups.reduce((total, group) =>
     total + group.letters.filter(letter =>
