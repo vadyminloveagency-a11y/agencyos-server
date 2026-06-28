@@ -11,6 +11,9 @@ let agencyUsers = [];
 let pendingAgencyProfileChoicePanel = '';
 const profileConnectingIds = new Set();
 const profilePendingCounts = new Map();
+const profilePendingLoadingIds = new Set();
+let profilePendingCountsLoadedAt = 0;
+let profilePendingCountsTimer = null;
 const AGENCY_PANEL_KEY = 'agencyos_active_panel';
 const AGENCY_ACCOUNT_TAB_KEY = 'agencyos_account_tab';
 const REMEMBER_ACCESS_KEY = 'agencyos_remember_access';
@@ -2212,6 +2215,40 @@ function unlockAgencyInboxSound() {
 document.addEventListener('pointerdown', unlockAgencyInboxSound, { capture: true });
 document.addEventListener('keydown', unlockAgencyInboxSound, { capture: true });
 
+async function loadProfilePendingCount(profileId) {
+  const id = String(profileId || '');
+  if (!id || profilePendingLoadingIds.has(id)) return;
+  profilePendingLoadingIds.add(id);
+  try {
+    const response = await fetch('/api/workspace/inbox', {
+      headers: { 'X-Profile-ID': id }
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || 'Could not load inbox count');
+    const noReplyCount = agencyPendingLetterCount(result.letters || []);
+    const previous = Number(profilePendingCounts.get(id)?.noReplyCount || 0) || 0;
+    profilePendingCounts.set(id, { noReplyCount, inboxCount: noReplyCount });
+    if (noReplyCount > 0) playAgencyInboxSound();
+  } catch (error) {
+    console.warn(`Could not load pending inbox count for ${id}`, error);
+  } finally {
+    profilePendingLoadingIds.delete(id);
+  }
+}
+
+function scheduleProfilePendingCountsRefresh(options = {}) {
+  if (profilePendingCountsTimer) return;
+  const force = options.force === true;
+  if (!force && Date.now() - profilePendingCountsLoadedAt < 60000) return;
+  profilePendingCountsTimer = window.setTimeout(async () => {
+    profilePendingCountsTimer = null;
+    profilePendingCountsLoadedAt = Date.now();
+    const ids = connectedProfileIds();
+    await Promise.all(ids.map(id => loadProfilePendingCount(id)));
+    renderSidebarProfileDock();
+  }, Math.max(0, Number(options.delay || 250) || 0));
+}
+
 function ensureSidebarProfileDock() {
   let dock = document.getElementById('sidebarProfileDock');
   if (!dock) {
@@ -2273,6 +2310,7 @@ function renderSidebarProfileDock() {
     </div>
   `;
   syncAgencyNavLocks();
+  scheduleProfilePendingCountsRefresh();
 }
 
 function isProfileWorkView(view) {
