@@ -1457,6 +1457,7 @@ const agencyDriveList = document.getElementById('agencyDriveList');
 const agencyBackBtn = document.getElementById('agencyBackBtn');
 const agencyRefreshBtn = document.getElementById('agencyRefreshBtn');
 const agencyAppUpdateBtn = document.getElementById('agencyAppUpdateBtn');
+const agencyDevToolsBtn = document.getElementById('agencyDevToolsBtn');
 const agencyClearCacheBtn = document.getElementById('agencyClearCacheBtn');
 const agencySettingsBtn = document.getElementById('agencySettingsBtn');
 const agencySettingsModal = document.getElementById('agencySettingsModal');
@@ -6947,6 +6948,17 @@ agencyAppUpdateBtn?.addEventListener('click', async () => {
     agencyAppUpdateBtn.disabled = false;
     agencyAppUpdateBtn.classList.remove('is-checking');
     agencyAppUpdateBtn.textContent = oldText || 'App Update';
+  }
+});
+agencyDevToolsBtn?.addEventListener('click', async () => {
+  if (!window.agencyElectron?.openDevTools) {
+    alert('Console is available in the desktop app only.');
+    return;
+  }
+  try {
+    await window.agencyElectron.openDevTools();
+  } catch (error) {
+    alert(error?.message || 'Could not open console.');
   }
 });
 agencyZoomOutBtn?.addEventListener('click', () => runAgencyNavigation('zoom-out'));

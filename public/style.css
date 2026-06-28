@@ -28142,6 +28142,13 @@ body.agency-desktop-app .agency-home-toolbar {
   pointer-events: auto;
 }
 
+.agency-home-toolbar .agency-devtools-btn {
+  width: 28px;
+  min-width: 28px;
+  padding: 0;
+  pointer-events: auto;
+}
+
 .agency-home-toolbar .agency-settings-btn {
   width: 28px;
   min-width: 28px;
@@ -28156,6 +28163,7 @@ body.agency-desktop-app .agency-home-toolbar {
 }
 
 .agency-home-toolbar .agency-clear-cache-btn svg,
+.agency-home-toolbar .agency-devtools-btn svg,
 .agency-home-toolbar .agency-settings-btn svg {
   width: 14px;
   height: 14px;
