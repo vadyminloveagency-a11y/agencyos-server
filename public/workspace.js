@@ -989,9 +989,11 @@ function isRecentReadLetter(letter) {
 
 function isRecentUnansweredInboxLetter(letter) {
   const threeMonthsAgo = Date.now() - 92 * 24 * 60 * 60 * 1000;
+  const sortDate = Number(letter?.sortDate || 0) || parseDateValue(letter?.dateText);
   return letter?.direction !== 'outgoing' &&
     (letter?.unread === true || letter?.unanswered === true) &&
-    Number(letter.sortDate || 0) >= threeMonthsAgo;
+    sortDate > 0 &&
+    sortDate >= threeMonthsAgo;
 }
 
 function hasRecentUnansweredInboxLetters(letters = workspaceLetters) {
@@ -1007,7 +1009,7 @@ function recentUnansweredInboxCount(letters = workspaceLetters) {
 
 function isNoReplyEligibleLetter(letter) {
   const threeMonthsAgo = Date.now() - 92 * 24 * 60 * 60 * 1000;
-  const sortDate = Number(letter?.sortDate || 0);
+  const sortDate = Number(letter?.sortDate || 0) || parseDateValue(letter?.dateText);
   return letter?.direction !== 'outgoing' &&
     (letter?.unread === true || letter?.unanswered === true) &&
     sortDate > 0 &&

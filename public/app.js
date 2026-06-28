@@ -7050,7 +7050,7 @@ agencyClearCacheBtn?.addEventListener('click', async () => {
     alert('Select a profile first.');
     return;
   }
-  const confirmed = confirm('Clear local letter cache for this profile?\n\nThis removes saved Workspace letters, history cards, media list, and downloaded attachments. Dream messages will not be deleted.');
+  const confirmed = confirm('Clear Message History cache for this profile?\n\nThis removes cached history cards, cached media, and downloaded attachments. Men, Inbox rows, and Dream messages will not be deleted.');
   if (!confirmed) return;
   agencyClearCacheBtn.disabled = true;
   agencyClearCacheBtn.classList.add('is-clearing');
@@ -7070,7 +7070,7 @@ agencyClearCacheBtn?.addEventListener('click', async () => {
       url.searchParams.set('v', String(Date.now()));
       frame.setAttribute('src', `${url.pathname.replace(/^\//, '')}${url.search}`);
     });
-    alert(`Cache cleared.\n\nLetters: ${result?.cleared?.letters || 0}\nMedia items: ${result?.cleared?.media || 0}\nAttachments: ${mb} MB`);
+    alert(`Message History cache cleared.\n\nInbox rows kept: ${result?.cleared?.preservedLetters || 0}\nMedia items: ${result?.cleared?.media || 0}\nAttachments: ${mb} MB`);
   } catch (error) {
     alert(error.message || 'Could not clear cache.');
   } finally {
