@@ -1900,6 +1900,31 @@ body.workspace-dark-theme .workspace-list-pager button.active {
   color: #16a34a;
 }
 
+.workspace-history-status-badge {
+  min-height: 16px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 950;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.workspace-history-status-badge.unread {
+  border: 1px solid rgba(239, 68, 68, .55);
+  background: rgba(239, 68, 68, .12);
+  color: #b91c1c;
+}
+
+.workspace-history-status-badge.unanswered {
+  border: 1px solid rgba(217, 119, 6, .55);
+  background: rgba(245, 158, 11, .14);
+  color: #92400e;
+}
+
 .workspace-letter-card.outgoing .workspace-letter-status {
   color: #9fc5ee;
 }
