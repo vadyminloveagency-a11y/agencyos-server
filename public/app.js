@@ -54,7 +54,9 @@ let ladyDisconnectInProgress = false;
 let profileChoiceConnecting = false;
 let profileSwitchInProgress = false;
 let profileSwitchClearTimer = null;
-let profileSwitchTargetId = '';
+const agencyInboxSound = new Audio('/assets/inbox-new-message.mp3');
+agencyInboxSound.preload = 'auto';
+agencyInboxSound.volume = 1;
 document.body.classList.toggle('agency-desktop-app', AGENCY_DESKTOP_CLIENT);
 document.body.classList.toggle('agency-web-client', !AGENCY_DESKTOP_CLIENT);
 if (!ladyConnected && !['stats', 'adminPanel', 'settings'].includes(currentView)) {
@@ -1615,7 +1617,22 @@ function refreshWorkspaceEmbedInPlace(reason = 'refresh') {
   if (!sent) reloadWorkspaceEmbed(reason);
 }
 
+function reloadWorkspaceEmbedForProfile(profileId, reason = 'switch-profile') {
+  const id = String(profileId || activeProfileId || '');
+  [workspaceEmbedFrame, agencyInboxFrame].forEach(frame => {
+    if (!frame) return;
+    const url = new URL('workspace.html', window.location.href);
+    url.searchParams.set('embedded', '1');
+    url.searchParams.set('autoloadInbox', '0');
+    url.searchParams.set('profileId', id);
+    url.searchParams.set('v', `20260629-profile-${reason}-${Date.now()}`);
+    frame.src = `workspace.html?${url.searchParams.toString()}`;
+  });
+}
+
 function switchWorkspaceProfileInPlace(profileId, reason = 'switch-profile') {
+  reloadWorkspaceEmbedForProfile(profileId, reason);
+  return;
   let sent = false;
   [workspaceEmbedFrame, agencyInboxFrame].forEach(frame => {
     if (!frame?.contentWindow) return;
@@ -1657,15 +1674,14 @@ function setProfileSwitchOverlay(active, profile = null) {
     if (overlay) overlay.hidden = !enabled;
   }
   if (enabled) {
-    profileSwitchTargetId = String(profile?.id || activeProfileId || '');
-    profileSwitchClearTimer = setTimeout(() => setProfileSwitchOverlay(false), 30000);
-  } else {
-    profileSwitchTargetId = '';
+    profileSwitchClearTimer = setTimeout(() => setProfileSwitchOverlay(false), 12000);
   }
 }
 
 function clearProfileSwitchOverlayOnFrameLoad() {
-  // Workspace sends WORKSPACE_READY after its real profile data is loaded.
+  if (document.body.classList.contains('agency-profile-switching')) {
+    waitForAgencyPaint().then(() => setProfileSwitchOverlay(false));
+  }
 }
 const cancelAddProfileBtn = document.getElementById('cancelAddProfileBtn');
 const newProfileId = document.getElementById('newProfileId');
@@ -2169,10 +2185,32 @@ function agencyPendingLetterCount(letters = []) {
 }
 
 function playAgencyInboxSound() {
-  const sound = new Audio('/assets/inbox-new-message.mp3');
-  sound.volume = 1;
-  sound.play().catch(() => {});
+  agencyInboxSound.muted = false;
+  agencyInboxSound.volume = 1;
+  agencyInboxSound.currentTime = 0;
+  agencyInboxSound.play().catch(() => {
+    const fallbackSound = new Audio('/assets/inbox-new-message.mp3');
+    fallbackSound.volume = 1;
+    fallbackSound.play().catch(() => {});
+  });
 }
+
+function unlockAgencyInboxSound() {
+  const wasMuted = agencyInboxSound.muted;
+  agencyInboxSound.muted = true;
+  agencyInboxSound.play()
+    .then(() => {
+      agencyInboxSound.pause();
+      agencyInboxSound.currentTime = 0;
+      agencyInboxSound.muted = wasMuted;
+    })
+    .catch(() => {
+      agencyInboxSound.muted = wasMuted;
+    });
+}
+
+document.addEventListener('pointerdown', unlockAgencyInboxSound, { capture: true });
+document.addEventListener('keydown', unlockAgencyInboxSound, { capture: true });
 
 function ensureSidebarProfileDock() {
   let dock = document.getElementById('sidebarProfileDock');
@@ -2224,7 +2262,10 @@ function renderSidebarProfileDock() {
         const noReplyCount = Math.max(0, Number(pending.noReplyCount || 0) || 0);
         return `
           <div class="sidebar-profile-dock-item ${active ? 'active' : ''} ${connected ? 'online' : ''} ${connecting ? 'connecting' : ''} ${active && connected ? 'active-online' : ''}" data-profile-id="${escapeAttr(profile.id)}" title="${escapeAttr(name)} - ${escapeAttr(profile.id)}">
-            <span class="sidebar-profile-dock-avatar ${profile.photoUrl ? '' : 'no-photo'}">${profile.photoUrl ? `<img src="${escapeAttr(profile.photoUrl)}" alt="">` : escapeHtml(initial)}${noReplyCount ? `<span class="sidebar-profile-pending-badge">+${escapeHtml(noReplyCount)}</span>` : ''}</span>
+            <span class="sidebar-profile-dock-avatar-wrap">
+              <span class="sidebar-profile-dock-avatar ${profile.photoUrl ? '' : 'no-photo'}">${profile.photoUrl ? `<img src="${escapeAttr(profile.photoUrl)}" alt="">` : escapeHtml(initial)}</span>
+              ${noReplyCount ? `<span class="sidebar-profile-pending-badge">+${escapeHtml(noReplyCount)}</span>` : ''}
+            </span>
             <span class="sidebar-profile-dock-copy"><strong>${escapeHtml(name)}</strong><small>${escapeHtml(statusText)}${connecting ? '<i class="login-dots"><b></b><b></b><b></b></i>' : ''}</small></span>
             <button class="sidebar-profile-power ${connected ? 'logout' : 'login'}" type="button" data-profile-power-id="${escapeAttr(profile.id)}" ${connecting ? 'disabled' : ''}>${connecting ? '...' : connected ? 'Off' : 'On'}</button>
           </div>`;
@@ -2570,13 +2611,6 @@ window.addEventListener('message', event => {
         inboxCount: Math.max(0, Number(event.data.inboxCount || 0) || 0)
       });
       renderSidebarProfileDock();
-    }
-    return;
-  }
-  if (event.data?.source === 'dream-workspace' && event.data?.type === 'WORKSPACE_READY' && workspaceCommandFrame) {
-    const id = String(event.data.profileId || '');
-    if (!profileSwitchTargetId || id === profileSwitchTargetId || id === String(activeProfileId || '')) {
-      waitForAgencyPaint().then(() => setProfileSwitchOverlay(false));
     }
     return;
   }

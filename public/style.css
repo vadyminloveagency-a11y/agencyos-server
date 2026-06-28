@@ -27793,8 +27793,8 @@ body.mandarin-home-active .agency-shell-sidebar #sidebarProfileDock + .agency-sh
   display: flex;
   flex-direction: column;
   gap: 5px;
-  max-height: 180px;
-  overflow-y: auto;
+  max-height: none;
+  overflow: visible;
 }
 
 .sidebar-profile-dock-item {
@@ -27861,14 +27861,20 @@ body.mandarin-home-active .agency-shell-sidebar #sidebarProfileDock + .agency-sh
   border-color: rgba(34, 197, 94, .58);
 }
 
-.sidebar-profile-dock-avatar {
+.sidebar-profile-dock-avatar-wrap {
   width: 30px;
   height: 30px;
   position: relative;
+  display: block;
+}
+
+.sidebar-profile-dock-avatar {
+  width: 30px;
+  height: 30px;
   display: grid;
   place-items: center;
   border-radius: 999px;
-  overflow: visible;
+  overflow: hidden;
   background: #2b211d;
   color: #f2d1c5;
   font-size: 11px;
@@ -27913,17 +27919,17 @@ body.mandarin-home-active .agency-shell-sidebar #sidebarProfileDock + .agency-sh
 
 .sidebar-profile-pending-badge {
   position: absolute;
-  right: -6px;
-  top: -6px;
-  min-width: 18px;
-  height: 16px;
-  padding: 0 5px;
+  right: -7px;
+  top: -7px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, .82);
+  border: 2px solid #050505;
   border-radius: 999px;
-  background: #b42318;
+  background: #ef1f3d;
   color: #fff;
   font-size: 9px;
   font-weight: 950;

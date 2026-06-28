@@ -11121,3 +11121,9 @@ body.workspace-dark-theme.workspace-embedded .workspace-history-card .workspace-
   justify-self: end !important;
   margin-left: auto !important;
 }
+
+body.workspace-embedded .workspace-history-status-badge.unanswered,
+body.workspace-dark-theme.workspace-embedded .workspace-history-status-badge.unanswered {
+  color: #b42318 !important;
+  opacity: 1 !important;
+}
