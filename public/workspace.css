@@ -1522,15 +1522,34 @@ body.workspace-dark-theme .workspace-list-pager button.active {
 }
 
 .workspace-attachment-preview.live {
-  min-height: 96px;
+  min-height: 120px;
   display: grid;
   align-content: center;
   justify-items: center;
   gap: 8px;
-  padding: 14px;
+  padding: 0;
 }
 
-.workspace-attachment-preview.live button {
+.workspace-live-attachment-slot {
+  width: 100%;
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  color: #9eb6ca;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.workspace-live-attachment-slot img,
+.workspace-live-attachment-slot video {
+  width: 100%;
+  max-height: 360px;
+  display: block;
+  object-fit: contain;
+  background: #071019;
+}
+
+.workspace-live-attachment-slot button {
   min-width: 132px;
   min-height: 34px;
   border: 1px solid rgba(251, 146, 60, .6);
@@ -1542,57 +1561,9 @@ body.workspace-dark-theme .workspace-list-pager button.active {
   cursor: pointer;
 }
 
-.workspace-attachment-preview.live button:disabled {
+.workspace-live-attachment-slot button:disabled {
   cursor: wait;
   opacity: .7;
-}
-
-.workspace-live-media-lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 2147483600;
-  display: grid;
-  place-items: center;
-  padding: 28px;
-  background: rgba(3, 7, 18, .78);
-}
-
-.workspace-live-media-frame {
-  max-width: min(92vw, 1100px);
-  max-height: 92vh;
-  display: grid;
-  gap: 8px;
-  justify-items: center;
-}
-
-.workspace-live-media-frame img,
-.workspace-live-media-frame video {
-  max-width: min(92vw, 1100px);
-  max-height: 84vh;
-  object-fit: contain;
-  border-radius: 8px;
-  background: #020617;
-}
-
-.workspace-live-media-label {
-  color: #e5e7eb;
-  font-size: 12px;
-  font-weight: 850;
-}
-
-.workspace-live-media-close {
-  position: fixed;
-  top: 18px;
-  right: 18px;
-  width: 36px;
-  height: 36px;
-  border: 1px solid rgba(255, 255, 255, .35);
-  border-radius: 50%;
-  background: rgba(15, 23, 42, .9);
-  color: #fff;
-  font-size: 18px;
-  font-weight: 900;
-  cursor: pointer;
 }
 
 .workspace-message-loading {

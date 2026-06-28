@@ -3092,9 +3092,11 @@ function renderAttachments(attachments = [], letter = {}) {
           const label = item.label || (item.kind === 'video' ? 'Video' : (item.kind === 'photo' ? 'Photo' : 'File'));
           if (item.live || letter?.messageLink || letter?.sourceUrl) {
             return `<figure class="workspace-attachment-preview live">
-                <button type="button" data-live-attachment-kind="${escapeAttr(isVideo ? 'video' : 'image')}" data-live-attachment-url="${escapeAttr(letter?.messageLink || letter?.sourceUrl || '')}">
-                  ${escapeHtml(isVideo ? 'Open video' : 'Open photo')}
-                </button>
+                <div class="workspace-live-attachment-slot"
+                  data-live-attachment-kind="${escapeAttr(isVideo ? 'video' : 'image')}"
+                  data-live-attachment-url="${escapeAttr(letter?.messageLink || letter?.sourceUrl || '')}">
+                  <span>Loading ${escapeHtml(isVideo ? 'video' : 'photo')}...</span>
+                </div>
                 <figcaption>${escapeHtml(label)}</figcaption>
               </figure>`;
           }
@@ -3122,40 +3124,16 @@ function renderAttachments(attachments = [], letter = {}) {
   `;
 }
 
-function closeWorkspaceLiveMedia() {
-  document.querySelector('.workspace-live-media-lightbox')?.remove();
-}
-
-function showWorkspaceLiveMedia(item = {}) {
-  closeWorkspaceLiveMedia();
-  const url = String(item.url || item.src || '').trim();
-  if (!url) throw new Error('Dream did not return a media link');
-  const isVideo = item.type === 'video' || /\.(?:mp4|webm|mov|m4v)(?:[?#]|$)/i.test(url);
-  const label = item.label || (isVideo ? 'Video' : 'Photo');
-  const overlay = document.createElement('div');
-  overlay.className = 'workspace-live-media-lightbox';
-  overlay.innerHTML = `
-    <button type="button" class="workspace-live-media-close" aria-label="Close">x</button>
-    <div class="workspace-live-media-frame">
-      ${isVideo
-        ? `<video src="${escapeAttr(url)}" controls autoplay playsinline></video>`
-        : `<img src="${escapeAttr(url)}" alt="${escapeAttr(label)}">`}
-      <div class="workspace-live-media-label">${escapeHtml(label)}</div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-}
-
-async function openWorkspaceLiveAttachment(button) {
-  const kind = String(button?.dataset?.liveAttachmentKind || 'image').toLowerCase() === 'video' ? 'video' : 'image';
-  const messageLink = String(button?.dataset?.liveAttachmentUrl || '').trim();
+async function loadWorkspaceLiveAttachmentSlot(slot) {
+  if (!slot || slot.dataset.loaded === 'true' || slot.dataset.loading === 'true') return;
+  const kind = String(slot?.dataset?.liveAttachmentKind || 'image').toLowerCase() === 'video' ? 'video' : 'image';
+  const messageLink = String(slot?.dataset?.liveAttachmentUrl || '').trim();
   const group = findGroup(workspaceSelectedId);
   const letter = selectedLetterFromGroup(group);
   const targetUrl = messageLink || String(letter?.messageLink || '').trim();
   if (!targetUrl) throw new Error('Letter link is missing');
-  const oldText = button.textContent;
-  button.disabled = true;
-  button.textContent = kind === 'video' ? 'Opening video...' : 'Opening photo...';
+  slot.dataset.loading = 'true';
+  slot.innerHTML = `<span>Loading ${escapeHtml(kind === 'video' ? 'video' : 'photo')}...</span>`;
   try {
     const response = await apiFetch('/api/workspace/read-letter', {
       method: 'POST',
@@ -3175,10 +3153,16 @@ async function openWorkspaceLiveAttachment(button) {
       return type === kind && String(attachment?.url || '').trim();
     });
     if (!item) throw new Error(kind === 'video' ? 'Video was not found in Dream letter' : 'Photo was not found in Dream letter');
-    showWorkspaceLiveMedia(item);
+    const url = String(item.url || item.src || '').trim();
+    const label = item.label || (kind === 'video' ? 'Video' : 'Photo');
+    slot.dataset.loaded = 'true';
+    slot.innerHTML = kind === 'video'
+      ? `<video src="${escapeAttr(url)}" controls playsinline preload="metadata"></video>`
+      : `<img src="${escapeAttr(url)}" alt="${escapeAttr(label)}" loading="lazy" decoding="async">`;
+  } catch (error) {
+    slot.innerHTML = `<button type="button" data-live-attachment-retry>${escapeHtml(error.message || 'Try again')}</button>`;
   } finally {
-    button.disabled = false;
-    button.textContent = oldText;
+    slot.dataset.loading = 'false';
   }
 }
 
@@ -4511,11 +4495,16 @@ menList.addEventListener('click', event => {
 });
 
 dialog.addEventListener('click', event => {
-  const liveAttachment = event.target.closest('[data-live-attachment-kind]');
-  if (liveAttachment) {
+  const liveRetry = event.target.closest('[data-live-attachment-retry]');
+  if (liveRetry) {
     event.preventDefault();
     event.stopPropagation();
-    openWorkspaceLiveAttachment(liveAttachment).catch(error => alert(error.message || 'Could not open media'));
+    const slot = liveRetry.closest('.workspace-live-attachment-slot');
+    if (slot) {
+      slot.dataset.loaded = 'false';
+      slot.dataset.loading = 'false';
+      loadWorkspaceLiveAttachmentSlot(slot).catch(error => alert(error.message || 'Could not open media'));
+    }
     return;
   }
   const translateButton = event.target.closest('.workspace-translate-message');
@@ -4525,18 +4514,15 @@ dialog.addEventListener('click', event => {
   translateMessage(translateButton);
 });
 
-document.addEventListener('click', event => {
-  if (
-    event.target.closest?.('.workspace-live-media-close') ||
-    event.target.classList?.contains('workspace-live-media-lightbox')
-  ) {
-    closeWorkspaceLiveMedia();
-  }
-});
-
-document.addEventListener('keydown', event => {
-  if (event.key === 'Escape') closeWorkspaceLiveMedia();
-});
+dialog.addEventListener('toggle', event => {
+  const details = event.target;
+  if (!(details instanceof HTMLDetailsElement) || !details.matches('.workspace-attachments') || !details.open) return;
+  details.querySelectorAll('.workspace-live-attachment-slot').forEach(slot => {
+    loadWorkspaceLiveAttachmentSlot(slot).catch(error => {
+      slot.innerHTML = `<button type="button" data-live-attachment-retry>${escapeHtml(error.message || 'Try again')}</button>`;
+    });
+  });
+}, true);
 
 menList.addEventListener('keydown', event => {
   if (event.key !== 'Enter' && event.key !== ' ') return;
