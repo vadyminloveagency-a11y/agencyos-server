@@ -616,11 +616,16 @@ function playInboxNewMessageSound() {
   });
 }
 
+function normalizeWorkspaceProfileId(value = '') {
+  const digits = String(value || '').replace(/\D+/g, '');
+  return /^\d{4,}$/.test(digits) ? digits : String(value || '').trim();
+}
+
 function incomingLetterIdentity(letter) {
   if (!letter || letter.direction === 'outgoing') return '';
   const url = String(letter.messageLink || '').trim();
   const urlKey = url.match(/\/members\/messaging\/read\/([^/?#]+)/i)?.[1] || url;
-  const id = String(letter.id || letter.profileId || '').trim();
+  const id = normalizeWorkspaceProfileId(letter.id || letter.profileId || '');
   const date = String(letter.dateText || '').trim().toLowerCase();
   const snippet = String(letter.snippet || letter.bodyText || '').trim().slice(0, 120).toLowerCase();
   return `${id}:${urlKey || date}:${snippet}`.trim();
@@ -655,12 +660,12 @@ function hasNewIncomingActivity(beforeLetters = [], afterLetters = workspaceLett
 }
 
 function isFreshPendingIncomingLetter(letter) {
-  const fiveMonthsAgo = Date.now() - 153 * 24 * 60 * 60 * 1000;
+  const threeMonthsAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
   const sortDate = parseDateValue(letter?.dateText);
   return letter?.direction !== 'outgoing' &&
     (letter?.unread === true || letter?.unanswered === true) &&
     sortDate > 0 &&
-    sortDate >= fiveMonthsAgo;
+    sortDate >= threeMonthsAgo;
 }
 
 function hasPendingIncomingLetters(letters = workspaceLetters) {
@@ -861,7 +866,7 @@ function groupedLetters(includeReadOnly = false) {
   const groups = new Map();
 
   workspaceLetters.forEach((letter, index) => {
-    const id = String(letter.id || letter.profileId || '').trim();
+    const id = normalizeWorkspaceProfileId(letter.id || letter.profileId || '');
     const groupKey = id || letter.profileLink || letter.name || `unknown-${index}`;
     const key = letter.key || `${groupKey}-${index}`;
     const normalizedLetter = {
@@ -908,14 +913,15 @@ function groupedLetters(includeReadOnly = false) {
     if (!group.siteFavoriteUpdatedAt && letter.siteFavoriteUpdatedAt) group.siteFavoriteUpdatedAt = letter.siteFavoriteUpdatedAt;
     const isOutgoing = normalizedLetter.direction === 'outgoing';
     if (!isOutgoing) {
+      const pending = letter.unread === true || letter.unanswered === true;
       group.incomingCount += 1;
       group.unread = group.unread || Boolean(letter.unread);
       if (letter.unread) {
         group.unreadKeys.add(incomingLetterIdentity(normalizedLetter) || String(normalizedLetter.key || ''));
         group.unreadCount = group.unreadKeys.size;
       }
-      group.unanswered = group.unanswered || Boolean(letter.unanswered);
-      if (letter.unanswered) {
+      group.unanswered = group.unanswered || pending;
+      if (pending) {
         group.unansweredKeys.add(incomingLetterIdentity(normalizedLetter) || String(normalizedLetter.key || ''));
         group.unansweredCount = group.unansweredKeys.size;
       }
@@ -976,7 +982,7 @@ function isRecentReadLetter(letter) {
 function isRecentUnansweredInboxLetter(letter) {
   const threeMonthsAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
   return letter?.direction !== 'outgoing' &&
-    letter?.unanswered === true &&
+    (letter?.unread === true || letter?.unanswered === true) &&
     Number(letter.sortDate || 0) >= threeMonthsAgo;
 }
 
@@ -992,12 +998,12 @@ function recentUnansweredInboxCount(letters = workspaceLetters) {
 }
 
 function isNoReplyEligibleLetter(letter) {
-  const sixMonthsAgo = Date.now() - 183 * 24 * 60 * 60 * 1000;
+  const threeMonthsAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
   const sortDate = Number(letter?.sortDate || 0);
   return letter?.direction !== 'outgoing' &&
-    letter?.unanswered === true &&
+    (letter?.unread === true || letter?.unanswered === true) &&
     sortDate > 0 &&
-    sortDate >= sixMonthsAgo;
+    sortDate >= threeMonthsAgo;
 }
 
 function noReplyEligibleCount(letters = workspaceLetters) {
@@ -1074,6 +1080,7 @@ function renderList() {
   const readGroups = groupedLetters(true);
   const inboxUnansweredCount = recentUnansweredInboxCount(workspaceLetters);
   const noReplyCount = noReplyEligibleCount(workspaceLetters);
+  postWorkspacePendingCounts();
   const readCount = readGroups.reduce((total, group) =>
     total + group.letters.filter(letter =>
       letter.direction === 'outgoing' &&
@@ -1643,13 +1650,13 @@ function revealWorkspaceDreamLetterPages(id, currentPage, lastPage = 0) {
 }
 
 function maybeExpandWorkspaceLetterPages(id, pageNumber) {
-  const idText = String(id || workspaceSelectedId || '').trim();
+  const idText = normalizeWorkspaceProfileId(id || workspaceSelectedId || '');
   if (!idText) return;
   const page = Math.max(1, Number(pageNumber) || 1);
   const currentLimit = workspaceLetterVisibleLimit(idText);
   if (page < currentLimit) return;
   const lettersOnPage = workspaceLetters.filter(letter =>
-    String(letter?.id || letter?.profileId || '').trim() === idText &&
+    normalizeWorkspaceProfileId(letter?.id || letter?.profileId || '') === idText &&
     Math.max(1, Number(letter?.dreamListPage || 1) || 1) === page
   ).length;
   if (lettersOnPage >= WORKSPACE_DREAM_PAGE_SIZE) {
@@ -2003,9 +2010,10 @@ function incomingStatusByDateForGroup(group) {
     const key = workspaceLetterDateKey(letter.dateText);
     if (!key) continue;
     const current = statuses.get(key) || { unread: false, unanswered: false };
+    const pending = letter.unread === true || letter.unanswered === true;
     statuses.set(key, {
       unread: current.unread || letter.unread === true,
-      unanswered: current.unanswered || letter.unanswered === true
+      unanswered: current.unanswered || pending
     });
   }
   return statuses;
@@ -2059,7 +2067,6 @@ function renderHistoryLettersPanel(group) {
           const entryStatus = direction === 'incoming'
             ? (incomingStatusByDate.get(workspaceLetterDateKey(entry.dateText)) || {})
             : {};
-          const isUnread = entryStatus.unread === true;
           const isNoReply = entryStatus.unanswered === true;
           const date = formatWorkspaceMessageDate(entry.dateText) || `Message ${pageStart + index + 1}`;
           const author = entry.author || group?.name || 'Message';
@@ -2076,7 +2083,7 @@ function renderHistoryLettersPanel(group) {
             ? `<span class="workspace-history-media-badge ${escapeAttr(mediaKind)}" data-history-media-kind="${escapeAttr(mediaKind)}" data-history-media-id="${escapeAttr(mediaId)}" data-history-media-hash="${escapeAttr(mediaHash || '')}" aria-label="${escapeAttr(mediaLabel)}"></span>`
             : '';
           return `
-            <button class="workspace-letter-card workspace-history-card ${direction} ${active ? 'active' : ''} ${entry.readByMan ? 'read-by-man' : ''} ${isUnread ? 'unread' : ''} ${isNoReply ? 'unanswered' : ''}" type="button" data-history-key="${escapeAttr(entry.key)}" ${entry.historyUrl ? `data-history-url="${escapeAttr(entry.historyUrl)}" title="Open this Dream letter"` : ''}>
+            <button class="workspace-letter-card workspace-history-card ${direction} ${active ? 'active' : ''} ${entry.readByMan ? 'read-by-man' : ''} ${isNoReply ? 'unanswered' : ''}" type="button" data-history-key="${escapeAttr(entry.key)}" ${entry.historyUrl ? `data-history-url="${escapeAttr(entry.historyUrl)}" title="Open this Dream letter"` : ''}>
               <span class="workspace-history-card-main">
                 <span class="workspace-history-media-slot" aria-hidden="${mediaBadge ? 'false' : 'true'}">
                   ${mediaBadge ? `<span class="workspace-history-media">${mediaBadge}</span>` : ''}
@@ -2086,7 +2093,6 @@ function renderHistoryLettersPanel(group) {
                 </span>
               </span>
               <span class="workspace-history-card-status">
-                ${isUnread ? '<span class="workspace-history-status-badge unread">new</span>' : ''}
                 ${isNoReply ? '<span class="workspace-history-status-badge unanswered">no reply</span>' : ''}
                 ${entry.readByMan ? '<span class="workspace-history-read-inline">read</span>' : ''}
               </span>
@@ -3253,6 +3259,27 @@ async function loadWorkspaceLiveAttachmentSlot(slot) {
   }
 }
 
+function postWorkspacePendingCounts() {
+  if (!workspaceEmbedded) return;
+  window.parent?.postMessage({
+    source: 'dream-workspace',
+    type: 'WORKSPACE_PENDING_COUNTS',
+    profileId: activeProfileId,
+    noReplyCount: noReplyEligibleCount(workspaceLetters),
+    inboxCount: recentUnansweredInboxCount(workspaceLetters)
+  }, '*');
+}
+
+function postWorkspaceReady() {
+  if (!workspaceEmbedded) return;
+  postWorkspacePendingCounts();
+  window.parent?.postMessage({
+    source: 'dream-workspace',
+    type: 'WORKSPACE_READY',
+    profileId: activeProfileId
+  }, '*');
+}
+
 function renderDialog(group) {
   if (!group) {
     renderEmpty();
@@ -3726,7 +3753,7 @@ async function openWorkspaceInbox(button = inboxFilterBtn, options = {}) {
     try {
       await scanAndSaveInbox(WORKSPACE_INBOX_AUTH_REFRESH_PAGES, { mergeOnly: true, limitRows: false, limitLetters: false });
       await reloadWorkspaceInbox();
-      if (hasNewIncomingActivity(beforeLetters, workspaceLetters)) playInboxNewMessageSound();
+      if (hasPendingIncomingLetters()) playInboxNewMessageSound();
       renderCurrentWorkspaceState();
     } catch (error) {
       console.warn('Could not refresh inbox after profile connection', error);
@@ -3780,7 +3807,7 @@ async function ensureWorkspaceInboxAfterConnect(options = {}) {
         else await new Promise(resolve => setTimeout(resolve, 800 * attempt));
       }
     }
-    if (hasNewIncomingActivity(beforeLetters, workspaceLetters)) playInboxNewMessageSound();
+    if (hasPendingIncomingLetters()) playInboxNewMessageSound();
   } finally {
     workspaceActiveSyncProfileIds.delete(syncProfileId);
     workspaceActiveSyncControllers.delete(syncProfileId);
@@ -3875,6 +3902,8 @@ async function loadWorkspace() {
       return;
     }
     menList.innerHTML = `<div class="workspace-muted-state">${escapeHtml(error.message)}</div>`;
+  } finally {
+    postWorkspaceReady();
   }
 }
 
@@ -4026,13 +4055,13 @@ async function reloadWorkspaceInbox(options = {}) {
 }
 
 function replaceWorkspaceLivePageLetters(targetId, page, incoming = [], directions = ['incoming', 'outgoing']) {
-  const id = String(targetId || '').trim();
+  const id = normalizeWorkspaceProfileId(targetId || '');
   const pageNumber = Math.max(1, Number(page || 1) || 1);
   const directionSet = new Set(directions.map(item => String(item || '').trim()).filter(Boolean));
   const listAnchor = directionSet.has('incoming')
     ? workspaceLetters
       .filter(letter =>
-        String(letter?.id || '').trim() === id &&
+        normalizeWorkspaceProfileId(letter?.id || letter?.profileId || '') === id &&
         String(letter?.direction || 'incoming') !== 'outgoing'
       )
       .sort((a, b) => parseDateValue(b?.dateText) - parseDateValue(a?.dateText))[0]
@@ -4044,12 +4073,12 @@ function replaceWorkspaceLivePageLetters(targetId, page, incoming = [], directio
       listAnchor: false,
       dreamListPage: Math.max(1, Number(letter?.dreamListPage || pageNumber) || pageNumber)
     }))
-    .filter(letter => String(letter?.id || '').trim() === id);
+    .filter(letter => normalizeWorkspaceProfileId(letter?.id || letter?.profileId || '') === id);
   const hasLiveIncoming = liveLetters.some(letter => String(letter?.direction || 'incoming') !== 'outgoing');
   const liveKeys = new Set(liveLetters.map(letter => String(letter?.key || '')).filter(Boolean));
   const nextLetters = [
     ...workspaceLetters.filter(letter => {
-      const letterId = String(letter?.id || '').trim();
+      const letterId = normalizeWorkspaceProfileId(letter?.id || letter?.profileId || '');
       const direction = String(letter?.direction || 'incoming') === 'outgoing' ? 'outgoing' : 'incoming';
       const letterPage = Math.max(1, Number(letter?.dreamListPage || 1) || 1);
       const key = String(letter?.key || '');
@@ -4741,8 +4770,8 @@ dialog.addEventListener('click', event => {
     workspaceSelectedHistoryKey = historyCard.dataset.historyKey || '';
     workspaceSelectedLetterKey = '';
     rememberSelectedDialog();
-    renderDialog(group);
     const entry = selectedHistoryEntryForGroup(group);
+    renderDialog(group);
     if (entry?.historyUrl) loadWorkspaceHistoryLetterDetails(entry, group);
     return;
   }

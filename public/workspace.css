@@ -1906,23 +1906,18 @@ body.workspace-dark-theme .workspace-list-pager button.active {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
-  font-size: 8px;
-  font-weight: 950;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 850;
   line-height: 1;
-  text-transform: uppercase;
-}
-
-.workspace-history-status-badge.unread {
-  border: 1px solid rgba(239, 68, 68, .55);
-  background: rgba(239, 68, 68, .12);
-  color: #b91c1c;
+  font-style: italic;
+  text-transform: lowercase;
 }
 
 .workspace-history-status-badge.unanswered {
-  border: 1px solid rgba(217, 119, 6, .55);
-  background: rgba(245, 158, 11, .14);
-  color: #92400e;
+  border: 0;
+  background: transparent;
+  color: #b42318;
 }
 
 .workspace-letter-card.outgoing .workspace-letter-status {
