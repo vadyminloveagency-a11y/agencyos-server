@@ -6916,7 +6916,7 @@ agencyClearCacheBtn?.addEventListener('click', async () => {
   }
 });
 agencyAppUpdateBtn?.addEventListener('click', async () => {
-  if (!window.agencyElectron?.checkForUpdates) {
+  if (!window.agencyElectron?.checkForUpdates || !window.agencyElectron?.installUpdate) {
     alert('Updates are available in the desktop app only.');
     return;
   }
@@ -6924,6 +6924,7 @@ agencyAppUpdateBtn?.addEventListener('click', async () => {
   agencyAppUpdateBtn.disabled = true;
   agencyAppUpdateBtn.classList.add('is-checking');
   agencyAppUpdateBtn.textContent = 'Checking...';
+  let installingUpdate = false;
   try {
     const result = await window.agencyElectron.checkForUpdates();
     if (!result?.ok) {
@@ -6938,16 +6939,29 @@ agencyAppUpdateBtn?.addEventListener('click', async () => {
       alert(result.message || 'No updates available.');
       return;
     }
-    const shouldDownload = confirm(`${result.message || `Update available: v${result.latestVersion}.`}\n\nCurrent version: v${result.currentVersion}\n\nDownload now?`);
-    if (shouldDownload && result.downloadUrl) {
-      await window.agencyElectron.openExternalUrl(result.downloadUrl);
+    const shouldInstall = confirm(`${result.message || `Update available: v${result.latestVersion}.`}\n\nCurrent version: v${result.currentVersion}\n\nInstall and restart now?`);
+    if (shouldInstall) {
+      agencyAppUpdateBtn.textContent = 'Installing...';
+      const installResult = await window.agencyElectron.installUpdate();
+      if (!installResult?.ok) {
+        alert(installResult?.error || 'Could not install update.');
+        return;
+      }
+      if (!installResult.hasUpdate) {
+        alert(installResult.message || 'No updates available.');
+        return;
+      }
+      installingUpdate = true;
+      agencyAppUpdateBtn.textContent = 'Restarting...';
     }
   } catch (error) {
     alert(error?.message || 'Could not check for updates.');
   } finally {
-    agencyAppUpdateBtn.disabled = false;
-    agencyAppUpdateBtn.classList.remove('is-checking');
-    agencyAppUpdateBtn.textContent = oldText || 'App Update';
+    if (!installingUpdate) {
+      agencyAppUpdateBtn.disabled = false;
+      agencyAppUpdateBtn.classList.remove('is-checking');
+      agencyAppUpdateBtn.textContent = oldText || 'App Update';
+    }
   }
 });
 agencyDevToolsBtn?.addEventListener('click', async () => {
