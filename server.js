@@ -499,18 +499,36 @@ function cleanWorkspaceAttachments(value) {
   const seen = new Set();
   return (Array.isArray(value) ? value : [])
     .map(item => {
-      const url = String(item?.url || item?.src || '').trim();
-      const localUrl = String(item?.localUrl || '').trim();
-      const dedupeKey = localUrl || url;
+      const rawUrl = String(item?.url || item?.src || '').trim();
+      const rawLocalUrl = String(item?.localUrl || '').trim();
+      const rawSourceUrl = String(item?.sourceUrl || '').trim();
+      const localUrl = workspaceAttachmentLocalFileExists(rawLocalUrl || rawUrl) ? (rawLocalUrl || rawUrl) : '';
+      const remoteUrl = rawSourceUrl || (/^\/workspace-attachments\//i.test(rawUrl) ? '' : rawUrl);
+      const url = localUrl || remoteUrl;
+      const dedupeKey = localUrl || remoteUrl;
       if (!dedupeKey || seen.has(dedupeKey)) return null;
-      if (workspaceMediaUrlLooksPageChrome(url)) return null;
+      if (workspaceMediaUrlLooksPageChrome(remoteUrl || url)) return null;
+      if (remoteUrl && !workspaceMediaUrlLooksLikeAttachment(remoteUrl, item?.type)) return null;
       seen.add(dedupeKey);
       const rawType = String(item?.type || '').toLowerCase();
       const type = rawType === 'video' || /\.(mp4|webm|mov|m4v)(?:[?#]|$)/i.test(url) ? 'video' : 'image';
-      return { type, url: localUrl || url, sourceUrl: localUrl ? url : String(item?.sourceUrl || ''), localUrl, label: item?.label || '' };
+      return { type, url, sourceUrl: localUrl ? remoteUrl : '', localUrl, label: item?.label || '' };
     })
     .filter(Boolean)
     .slice(0, 12);
+}
+
+function workspaceAttachmentLocalFileExists(url = '') {
+  const text = String(url || '').trim();
+  if (!/^\/workspace-attachments\//i.test(text)) return false;
+  try {
+    const relative = decodeURIComponent(text.replace(/^\/workspace-attachments\/+/i, '')).replace(/[\\/]+/g, path.sep);
+    const root = path.resolve(WORKSPACE_ATTACHMENTS_DIR);
+    const target = path.resolve(root, relative);
+    return target.startsWith(`${root}${path.sep}`) && fs.existsSync(target);
+  } catch {
+    return false;
+  }
 }
 
 function workspaceMediaUrlLooksPageChrome(url = '') {
