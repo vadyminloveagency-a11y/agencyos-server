@@ -9,7 +9,7 @@ const LETTERBOT_DEFAULT_AUDIENCE = 'online';
 const LETTERBOT_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const LETTERBOT_MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const LETTERBOT_SEND_TICK_MS = 10_000;
-const LETTERBOT_BUILD_ID = '20260629-11';
+const LETTERBOT_BUILD_ID = '20260629-18';
 const letterBotRunsInFlight = new Map();
 const letterBotSendLoops = new Map();
 const letterBotStatsRefreshAt = new Map();
@@ -1007,6 +1007,78 @@ function registerLetterBotRoutes(app, deps) {
       queueLetterBotRun(deps, id, {});
     } catch (error) {
       res.status(error.status || 500).json({ ok: false, error: error.message || 'Could not send letter' });
+    }
+  });
+
+  app.post('/api/profiles/:id/letterbot/desktop/start', requireUser, (req, res) => {
+    if (!isDesktopAgencyClient(req)) {
+      return res.status(403).json({ ok: false, error: 'Desktop client required' });
+    }
+    const db = readDb();
+    const id = String(req.params.id);
+    try {
+      const profile = requireProfileForUser(db, req.user, id);
+      const config = normalizeLetterBotConfig(profile.letterBot);
+      if (!pickLetterBotEntry(config)) return res.status(400).json({ ok: false, error: 'Add at least one letter text' });
+      config.enabled = true;
+      config.nextRunAt = new Date().toISOString();
+      resetLetterBotSessionCounters(config);
+      profile.letterBot = config;
+      profile.updatedAt = new Date().toISOString();
+      writeDb(db);
+      res.json({ ok: true, letterbot: publicLetterBotConfig(profile, id, letterBotMediaRoot), queued: true, desktopRun: true });
+    } catch (error) {
+      res.status(error.status || 500).json({ ok: false, error: error.message || 'Could not start LetterBot' });
+    }
+  });
+
+  app.post('/api/profiles/:id/letterbot/desktop/send-now', requireUser, (req, res) => {
+    if (!isDesktopAgencyClient(req)) {
+      return res.status(403).json({ ok: false, error: 'Desktop client required' });
+    }
+    const db = readDb();
+    const id = String(req.params.id);
+    try {
+      const profile = requireProfileForUser(db, req.user, id);
+      if (!pickLetterBotEntry(normalizeLetterBotConfig(profile.letterBot))) {
+        return res.status(400).json({ ok: false, error: 'Add at least one letter text' });
+      }
+      res.json({ ok: true, letterbot: publicLetterBotConfig(profile, id, letterBotMediaRoot), queued: true, desktopRun: true });
+    } catch (error) {
+      res.status(error.status || 500).json({ ok: false, error: error.message || 'Could not queue send' });
+    }
+  });
+
+  app.post('/api/profiles/:id/letterbot/desktop/report', requireUser, (req, res) => {
+    if (!isDesktopAgencyClient(req)) {
+      return res.status(403).json({ ok: false, error: 'Desktop client required' });
+    }
+    const db = readDb();
+    const id = String(req.params.id);
+    try {
+      const profile = requireProfileForUser(db, req.user, id);
+      const config = normalizeLetterBotConfig(profile.letterBot);
+      const patch = req.body && typeof req.body === 'object' ? req.body : {};
+      if (typeof patch.enabled === 'boolean') config.enabled = patch.enabled;
+      if (typeof patch.lastRunAt === 'string') config.lastRunAt = patch.lastRunAt;
+      if (typeof patch.lastTemplateAt === 'string') config.lastTemplateAt = patch.lastTemplateAt;
+      if (typeof patch.lastSuccessAt === 'string') config.lastSuccessAt = patch.lastSuccessAt;
+      if (typeof patch.lastError === 'string') config.lastError = patch.lastError;
+      if (typeof patch.nextRunAt === 'string') config.nextRunAt = patch.nextRunAt;
+      if (Number.isFinite(patch.menSentSession)) config.menSentSession = patch.menSentSession;
+      if (Number.isFinite(patch.menSentToday)) {
+        config.menSentToday = patch.menSentToday;
+        config.menSentDay = letterBotTodayKey();
+      }
+      if (patch.stats && typeof patch.stats === 'object') {
+        applyDreamSendPageStats(profile, patch.stats);
+      }
+      profile.letterBot = config;
+      profile.updatedAt = new Date().toISOString();
+      writeDb(db);
+      res.json({ ok: true, letterbot: publicLetterBotConfig(profile, id, letterBotMediaRoot) });
+    } catch (error) {
+      res.status(error.status || 500).json({ ok: false, error: error.message || 'Could not save LetterBot state' });
     }
   });
 }

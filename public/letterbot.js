@@ -25,10 +25,22 @@
   const previewBody = document.getElementById('agencyLetterBotPreviewBody');
   const previewCloseBtn = document.getElementById('agencyLetterBotPreviewClose');
 
-  const EXPECTED_BUILD = '20260629-11';
-  const LETTERBOT_RUNTIME_MESSAGE = 'Отправка на сервере отключена, чтобы Render не падал. LetterBot будет работать с вашего ПК в следующем обновлении. Текст письма можно сохранять.';
+  const EXPECTED_BUILD = '20260629-18';
+  const LETTERBOT_RUNTIME_MESSAGE = 'Отправка на сервере отключена, чтобы Render не падал. Запустите AgencyOS Desktop (v0.2+) — LetterBot работает с вашего ПК.';
 
   let letterBotSendingBlocked = false;
+
+  function isDesktopLetterBotAvailable() {
+    return typeof window.agencyElectron?.letterBotStart === 'function';
+  }
+
+  async function desktopLetterBotCall(method, profileId) {
+    const fn = window.agencyElectron?.[method];
+    if (typeof fn !== 'function') throw new Error('Desktop LetterBot is not available');
+    const result = await fn(profileId);
+    if (!result?.ok) throw new Error(result?.error || 'Desktop LetterBot failed');
+    return result;
+  }
 
   async function parseApiJson(response) {
     const contentType = String(response.headers.get('content-type') || '').toLowerCase();
@@ -421,7 +433,8 @@
     try {
       const health = await fetch('/api/health').then(r => r.json()).catch(() => ({}));
       letterBotBuildId = String(health?.letterBotBuild || '');
-      setLetterBotRuntimeBlocked(health?.serverPlaywright === false);
+      const desktopMode = isDesktopLetterBotAvailable();
+      setLetterBotRuntimeBlocked(!desktopMode && health?.serverPlaywright === false);
       const result = await apiLetterBot('GET');
       letterBotState = result.letterbot || null;
       if (intervalInput && letterBotState) intervalInput.value = String(letterBotState.intervalMinutes || 20);
@@ -565,11 +578,22 @@
   startBtn?.addEventListener('click', () => {
     if (blockLetterBotAction()) return;
     startBtn.disabled = true;
-    saveLetterBotConfig()
-      .then(() => apiLetterBot('POST', '/start'))
-      .then(result => {
-        letterBotState = result.letterbot;
-        if (letterBotState) letterBotState.enabled = true;
+    const profileId = activeProfileId();
+    const startPromise = isDesktopLetterBotAvailable()
+      ? saveLetterBotConfig()
+        .then(() => desktopLetterBotCall('letterBotStart', profileId))
+        .then(result => {
+          letterBotState = result.letterbot;
+          if (letterBotState) letterBotState.enabled = true;
+        })
+      : saveLetterBotConfig()
+        .then(() => apiLetterBot('POST', '/start'))
+        .then(result => {
+          letterBotState = result.letterbot;
+          if (letterBotState) letterBotState.enabled = true;
+        });
+    startPromise
+      .then(() => {
         renderLetterBotEntries();
         updateLetterBotStatus();
         startLetterBotPoll();
@@ -584,9 +608,16 @@
   });
   stopBtn?.addEventListener('click', () => {
     stopBtn.disabled = true;
-    apiLetterBot('POST', '/stop')
-      .then(result => {
+    const profileId = activeProfileId();
+    const stopPromise = isDesktopLetterBotAvailable()
+      ? desktopLetterBotCall('letterBotStop', profileId).then(result => {
         letterBotState = result.letterbot;
+      })
+      : apiLetterBot('POST', '/stop').then(result => {
+        letterBotState = result.letterbot;
+      });
+    stopPromise
+      .then(() => {
         updateLetterBotStatus();
         stopLetterBotPoll();
       })
@@ -596,10 +627,20 @@
   sendNowBtn?.addEventListener('click', () => {
     if (blockLetterBotAction()) return;
     sendNowBtn.disabled = true;
-    saveLetterBotConfig()
-      .then(() => apiLetterBot('POST', '/send-now'))
-      .then(result => {
-        letterBotState = result.letterbot;
+    const profileId = activeProfileId();
+    const sendPromise = isDesktopLetterBotAvailable()
+      ? saveLetterBotConfig()
+        .then(() => desktopLetterBotCall('letterBotSendNow', profileId))
+        .then(result => {
+          letterBotState = result.letterbot;
+        })
+      : saveLetterBotConfig()
+        .then(() => apiLetterBot('POST', '/send-now'))
+        .then(result => {
+          letterBotState = result.letterbot;
+        });
+    sendPromise
+      .then(() => {
         renderLetterBotEntries();
         updateLetterBotStatus();
       })

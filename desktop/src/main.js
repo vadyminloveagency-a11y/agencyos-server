@@ -2,14 +2,16 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { DreamProfileManager } from './dream-profiles.js';
+import { LetterBotRunner } from './letterbot-runner.js';
 import { readConfig, resolveServerUrl, writeConfig, pickWorkingServerUrl, DEFAULT_SERVER_URL } from './config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const APP_VERSION = '0.1.0';
+const APP_VERSION = '0.2.0';
 const isDev = process.argv.includes('--dev');
 
 let mainWindow = null;
 let dreamProfiles = null;
+let letterBotRunner = null;
 let serverUrl = resolveServerUrl();
 
 function crmUrl() {
@@ -95,6 +97,11 @@ function createMainWindow() {
   dreamProfiles = new DreamProfileManager({
     serverUrl,
     authSession: mainWindow.webContents.session
+  });
+  letterBotRunner = new LetterBotRunner({
+    dreamProfiles,
+    authSession: mainWindow.webContents.session,
+    serverUrl
   });
 
   mainWindow.webContents.on('did-fail-load', (_event, code, description, validatedURL) => {
@@ -185,8 +192,45 @@ function registerIpcHandlers() {
   ipcMain.handle('agency:get-desktop-info', async () => ({
     ok: true,
     version: APP_VERSION,
-    serverUrl
+    serverUrl,
+    letterBot: true
   }));
+
+  ipcMain.handle('agency:letterbot-start', async (_event, profileId) => {
+    try {
+      const letterbot = await letterBotRunner.start(profileId);
+      return { ok: true, letterbot };
+    } catch (error) {
+      return { ok: false, error: error.message || 'Could not start LetterBot' };
+    }
+  });
+
+  ipcMain.handle('agency:letterbot-stop', async (_event, profileId) => {
+    try {
+      const letterbot = await letterBotRunner.stop(profileId);
+      return { ok: true, letterbot };
+    } catch (error) {
+      return { ok: false, error: error.message || 'Could not stop LetterBot' };
+    }
+  });
+
+  ipcMain.handle('agency:letterbot-send-now', async (_event, profileId) => {
+    try {
+      const letterbot = await letterBotRunner.sendNow(profileId);
+      return { ok: true, letterbot };
+    } catch (error) {
+      return { ok: false, error: error.message || 'Could not send letter' };
+    }
+  });
+
+  ipcMain.handle('agency:letterbot-status', async (_event, profileId) => {
+    try {
+      const letterbot = await letterBotRunner.status(profileId);
+      return { ok: true, letterbot };
+    } catch (error) {
+      return { ok: false, error: error.message || 'Could not load LetterBot status' };
+    }
+  });
 }
 
 app.whenReady().then(async () => {

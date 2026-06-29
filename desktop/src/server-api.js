@@ -13,6 +13,7 @@ export async function apiRequest(electronSession, serverUrl, pathname, options =
   const url = `${base}${pathname.startsWith('/') ? pathname : `/${pathname}`}`;
   const headers = {
     Accept: 'application/json',
+    'X-Agency-Client': 'desktop',
     ...(options.headers || {})
   };
   const cookieHeader = await cookieHeaderForSession(electronSession, base);

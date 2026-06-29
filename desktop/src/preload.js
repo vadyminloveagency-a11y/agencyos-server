@@ -9,5 +9,9 @@ contextBridge.exposeInMainWorld('agencyElectron', {
   checkForUpdates: () => ipcRenderer.invoke('agency:check-for-updates'),
   installUpdate: () => ipcRenderer.invoke('agency:install-update'),
   openDevTools: () => ipcRenderer.invoke('agency:open-devtools'),
-  getDesktopInfo: () => ipcRenderer.invoke('agency:get-desktop-info')
+  getDesktopInfo: () => ipcRenderer.invoke('agency:get-desktop-info'),
+  letterBotStart: profileId => ipcRenderer.invoke('agency:letterbot-start', profileId),
+  letterBotStop: profileId => ipcRenderer.invoke('agency:letterbot-stop', profileId),
+  letterBotSendNow: profileId => ipcRenderer.invoke('agency:letterbot-send-now', profileId),
+  letterBotStatus: profileId => ipcRenderer.invoke('agency:letterbot-status', profileId)
 });
