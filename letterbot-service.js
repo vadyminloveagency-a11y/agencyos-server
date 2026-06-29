@@ -8,7 +8,7 @@ const LETTERBOT_DEFAULT_AUDIENCE = 'online';
 const LETTERBOT_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const LETTERBOT_MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const LETTERBOT_SEND_TICK_MS = 10_000;
-const LETTERBOT_BUILD_ID = '20260629-10';
+const LETTERBOT_BUILD_ID = '20260629-11';
 const letterBotRunsInFlight = new Map();
 const letterBotSendLoops = new Map();
 const letterBotStatsRefreshAt = new Map();
@@ -611,11 +611,7 @@ async function trySendOneDreamLetter(deps, profileId) {
   if (!config.enabled) return false;
 
   let browserSession = deps.dreamBrowserSessions.get(id);
-  if (!browserSession?.page) {
-    const user = profileLetterBotUser(db, id, deps.currentAssignedUserForProfile);
-    if (!user) return false;
-    browserSession = await deps.startDreamBrowser(db, user, id, { force: false, headless: true, refreshDreamSession: false });
-  }
+  if (!browserSession?.page) return false;
 
   const page = browserSession.page;
   await openLetterBotSendPage(page).catch(() => {});

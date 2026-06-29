@@ -44,6 +44,7 @@ const DREAM_LOGIN_URL = 'https://www.dream-singles.com/login';
 const DREAM_INBOX_URL = 'https://www.dream-singles.com/members/messaging/inbox';
 const DREAM_ACCOUNT_URL = 'https://www.dream-singles.com/members/account/';
 const DREAM_HEARTBEAT_INTERVAL_MS = Math.max(15_000, Number(process.env.DREAM_HEARTBEAT_INTERVAL_MS || 45_000) || 45_000);
+const DREAM_MAX_BROWSER_SESSIONS = Math.max(1, Number(process.env.DREAM_MAX_BROWSER_SESSIONS) || 1);
 const DREAM_BROWSER_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -116,6 +117,9 @@ app.get('/api/health', (req, res) => {
     service: 'dream-team',
     storage: USE_POSTGRES ? 'postgres' : 'file',
     letterBotBuild: letterBotService.LETTERBOT_BUILD_ID,
+    dreamBrowsers: dreamBrowserSessions.size,
+    dreamBrowserLimit: DREAM_MAX_BROWSER_SESSIONS,
+    memoryMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
     time: new Date().toISOString()
   });
 });
@@ -2645,6 +2649,16 @@ async function startDreamBrowser(db, user, profileId, options = {}) {
   if (existing && options.force !== true) return existing;
   if (existing) await stopDreamBrowser(id);
 
+  if (
+    options.force !== true &&
+    !dreamBrowserSessions.has(id) &&
+    dreamBrowserSessions.size >= DREAM_MAX_BROWSER_SESSIONS
+  ) {
+    const error = new Error(`Browser limit ${DREAM_MAX_BROWSER_SESSIONS} reached. Disconnect another profile or raise DREAM_MAX_BROWSER_SESSIONS.`);
+    error.status = 503;
+    throw error;
+  }
+
   let playwright;
   try {
     playwright = await ensurePlaywrightChromium(PLAYWRIGHT_BROWSERS_DIR);
@@ -2659,7 +2673,7 @@ async function startDreamBrowser(db, user, profileId, options = {}) {
   fs.mkdirSync(userDataDir, { recursive: true });
   const context = await playwright.chromium.launchPersistentContext(userDataDir, {
     headless: options.headless !== false,
-    viewport: { width: 1366, height: 768 },
+    viewport: { width: 1024, height: 640 },
     locale: 'en-US',
     timezoneId: 'Europe/Kiev',
     userAgent: DREAM_BROWSER_HEADERS['User-Agent'],
@@ -2667,6 +2681,9 @@ async function startDreamBrowser(db, user, profileId, options = {}) {
       ...(options.appWindow ? ['--app=about:blank'] : []),
       '--disable-blink-features=AutomationControlled',
       '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-extensions',
+      '--mute-audio',
       '--no-sandbox'
     ]
   });

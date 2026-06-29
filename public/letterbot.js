@@ -25,7 +25,7 @@
   const previewBody = document.getElementById('agencyLetterBotPreviewBody');
   const previewCloseBtn = document.getElementById('agencyLetterBotPreviewClose');
 
-  const EXPECTED_BUILD = '20260629-10';
+  const EXPECTED_BUILD = '20260629-11';
 
   async function parseApiJson(response) {
     const contentType = String(response.headers.get('content-type') || '').toLowerCase();
