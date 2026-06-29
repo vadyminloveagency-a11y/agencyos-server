@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&display=swap" rel="stylesheet">
   <link rel="icon" type="image/svg+xml" href="assets/inbox-favicon.svg?v=20260621-mail">
-  <link rel="stylesheet" href="workspace.css?v=20260629-workspace-status-1">
+  <link rel="stylesheet" href="workspace.css?v=20260629-reload-overlay-1">
 </head>
 <body>
   <div class="workspace-shell">
@@ -67,18 +67,7 @@
         <div id="workspaceHeaderLetters" class="workspace-header-letters hidden"></div>
       </header>
 
-      <section id="workspaceDialog" class="workspace-dialog">
-        <div class="workspace-empty-layout">
-          <div class="workspace-empty-main">
-            <div class="workspace-loading-state" aria-live="polite">
-              <span class="workspace-spinner"></span>
-              <strong>Reloading</strong>
-              <span>Please wait...</span>
-            </div>
-          </div>
-          <aside class="workspace-empty-side" aria-hidden="true"></aside>
-        </div>
-      </section>
+      <section id="workspaceDialog" class="workspace-dialog" aria-live="polite"></section>
 
       <footer class="workspace-composer hidden">
         <div class="workspace-reply-box">

@@ -393,7 +393,7 @@ window.addEventListener('message', event => {
     const beforeStats = workspaceListStats(beforeLetters);
     workspaceInboxListLoading = true;
     workspaceListLoadingFilter = 'inbox';
-    setWorkspaceActionStatus('Checking Inbox page 1...');
+    setWorkspaceBlockingOverlay(true, 'Reloading');
     renderCurrentWorkspaceState();
     scanAndSaveInbox(1, { mergeOnly: true, limitRows: false, limitLetters: false })
       .then(() => reloadWorkspaceInbox())
@@ -407,6 +407,7 @@ window.addEventListener('message', event => {
       .finally(() => {
         workspaceInboxListLoading = false;
         if (workspaceListLoadingFilter === 'inbox') workspaceListLoadingFilter = '';
+        setWorkspaceBlockingOverlay(false);
         renderCurrentWorkspaceState();
         window.setTimeout(() => setWorkspaceActionStatus(''), 4500);
       });
@@ -468,9 +469,6 @@ function setWorkspaceBlockingOverlay(active, message = '') {
 
 function setWorkspaceActionStatus(message = '', button = null) {
   const text = String(message || '').trim();
-  if (document.body.classList.contains('workspace-blocking-overlay-active')) {
-    document.body.dataset.blockingOverlayMessage = text || 'Reloading';
-  }
   if (button) button.title = text || button.getAttribute('aria-label') || button.textContent || 'Action';
   if (workspaceProfileSyncRunning && refreshBtn) {
     refreshBtn.title = text || 'Syncing Dream Singles';
@@ -1594,21 +1592,11 @@ function renderDisconnectedWorkspace() {
 function renderLoading() {
   clearHeaderDialog();
   headerTitle?.classList.add('hidden');
-  dialog.innerHTML = `
-    <div class="workspace-empty-layout">
-      <div class="workspace-empty-main">
-        <div class="workspace-loading-state" aria-live="polite">
-          <span class="workspace-spinner"></span>
-          <strong>Reloading</strong>
-          <span>Please wait...</span>
-        </div>
-      </div>
-      <aside class="workspace-empty-side" aria-hidden="true"></aside>
-    </div>
-  `;
+  dialog.innerHTML = '';
   composer?.classList.add('hidden');
   reply.disabled = true;
   sendBtn.disabled = true;
+  setWorkspaceBlockingOverlay(true, 'Reloading');
 }
 
 function renderLetterPreviewUnused(item) {
@@ -3965,6 +3953,7 @@ async function loadWorkspace() {
     }
     menList.innerHTML = `<div class="workspace-muted-state">${escapeHtml(error.message)}</div>`;
   } finally {
+    setWorkspaceBlockingOverlay(false);
     postWorkspaceReady();
   }
 }
@@ -4306,6 +4295,7 @@ async function syncAllWorkspace(button = refreshBtn) {
   workspaceActiveSyncControllers.set(syncProfileId, controller);
   const oldText = button?.textContent || '';
   setProfileSyncRunning(true, 'Starting sync');
+  setWorkspaceBlockingOverlay(true, 'Reloading');
   if (button) {
     button.disabled = true;
     button.textContent = 'Updating';
@@ -4336,6 +4326,7 @@ async function syncAllWorkspace(button = refreshBtn) {
       if (rowsUpdateBtn && rowsUpdateBtn !== button) rowsUpdateBtn.disabled = false;
       if (syncRowsInput) syncRowsInput.disabled = false;
       setProfileSyncRunning(false);
+      setWorkspaceBlockingOverlay(false);
     }
   }
 }
@@ -4380,6 +4371,7 @@ async function updateWorkspaceInboxRows(button = rowsUpdateBtn) {
   const beforeLetters = [...workspaceLetters];
   workspaceInboxListLoading = true;
   workspaceListLoadingFilter = 'inbox';
+  setWorkspaceBlockingOverlay(true, 'Reloading');
   renderList();
   if (refreshBtn && refreshBtn !== button) refreshBtn.disabled = true;
   if (syncRowsInput) syncRowsInput.disabled = true;
@@ -4394,6 +4386,7 @@ async function updateWorkspaceInboxRows(button = rowsUpdateBtn) {
   } finally {
     workspaceInboxListLoading = false;
     if (workspaceListLoadingFilter === 'inbox') workspaceListLoadingFilter = '';
+    setWorkspaceBlockingOverlay(false);
     if (refreshBtn && refreshBtn !== button) refreshBtn.disabled = false;
     if (syncRowsInput) syncRowsInput.disabled = false;
     renderCurrentWorkspaceState();

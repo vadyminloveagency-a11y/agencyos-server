@@ -9034,38 +9034,6 @@ body.workspace-embedded:not(.workspace-dark-theme) .workspace-dialog:has(.worksp
   background: #f8f6f3 !important;
 }
 
-body.workspace-embedded .workspace-loading-state {
-  width: auto !important;
-  min-height: 0 !important;
-  gap: 14px !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  transform: none !important;
-}
-
-body.workspace-embedded .workspace-loading-state strong {
-  margin-top: 0 !important;
-  color: #171412 !important;
-  font-size: 16px !important;
-  font-weight: 800 !important;
-}
-
-body.workspace-embedded .workspace-loading-state span:not(.workspace-spinner) {
-  display: none !important;
-}
-
-body.workspace-embedded .workspace-loading-state .workspace-spinner {
-  width: 170px !important;
-  height: 170px !important;
-  border: 0 !important;
-  background: conic-gradient(from 0deg, #6d6af4, #9190f5, #d8dafc, #f2f3ff, #6d6af4) !important;
-  mask-image: radial-gradient(circle, transparent 0 46%, #000 47% 68%, transparent 69%) !important;
-  -webkit-mask-image: radial-gradient(circle, transparent 0 46%, #000 47% 68%, transparent 69%) !important;
-  animation: workspace-spin 1s linear infinite !important;
-}
-
 body.workspace-dark-theme.workspace-embedded .workspace-dialog:has(.workspace-empty-layout),
 body.workspace-dark-theme.workspace-embedded .workspace-dialog:has(.workspace-empty-layout) .workspace-empty-layout,
 body.workspace-dark-theme.workspace-embedded .workspace-dialog:has(.workspace-empty-layout) .workspace-empty-side {
@@ -9950,8 +9918,7 @@ body.workspace-dark-theme.workspace-embedded .workspace-unread-badge {
 }
 
 /* Center empty chat cards inside the available workspace instead of lifting them above center. */
-body.workspace-embedded .workspace-empty,
-body.workspace-embedded .workspace-loading-state {
+body.workspace-embedded .workspace-empty {
   transform: translateY(0) !important;
 }
 
