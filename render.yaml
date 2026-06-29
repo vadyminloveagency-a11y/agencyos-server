@@ -3,7 +3,7 @@ services:
     name: dream-team-crm
     env: node
     plan: starter
-    buildCommand: npm ci
+    buildCommand: npm ci && npx playwright install chromium
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
@@ -15,6 +15,8 @@ services:
         value: /var/data/photos
       - key: DREAM_TEAM_WORKSPACE_ATTACHMENTS_DIR
         value: /var/data/workspace-attachments
+      - key: DREAM_TEAM_LETTERBOT_MEDIA_DIR
+        value: /var/data/letterbot-media
       - key: DREAM_TEAM_CREDENTIAL_KEY
         generateValue: true
     disk:

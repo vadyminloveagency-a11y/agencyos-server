@@ -13,7 +13,8 @@
   },
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check scripts/export-runtime-data.mjs"
+    "check": "node --check server.js && node --check scripts/export-runtime-data.mjs",
+    "postinstall": "playwright install chromium"
   },
   "dependencies": {
     "cors": "^2.8.5",
