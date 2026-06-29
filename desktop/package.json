@@ -1,6 +1,6 @@
 {
   "name": "agencyos-desktop",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "AgencyOS desktop client for operators",
   "main": "src/main.js",
@@ -23,7 +23,7 @@
     "appId": "com.agencyos.desktop",
     "productName": "AgencyOS",
     "directories": {
-      "output": "../release/desktop"
+      "output": "../release/desktop-030"
     },
     "files": [
       "src/**/*",

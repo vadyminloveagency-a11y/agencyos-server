@@ -1,47 +1,36 @@
-# AgencyOS Desktop
+# AgencyOS Desktop v0.3.0
 
-Программа для операторов: CRM + отдельное окно Dream Singles на каждую анкету.
+Программа для операторов. Сервер: `https://agencyos-server-096a.onrender.com` (только **agencyos-server**, не dream-team-crm).
 
-## Что делает
+## Архитектура
 
-- Открывает AgencyOS с вашего сервера (Render или локально).
-- Операторы входят только из программы (`clientType: desktop`).
-- При Connect анкеты сервер держит **лёгкую сессию** (Online), **без Chromium на Render** (`DISABLE_SERVER_PLAYWRIGHT=1`).
-- Программа открывает **своё окно Dream** с отдельным профилем на анкету (как профиль Chrome).
+| Часть | Где работает |
+|-------|----------------|
+| CRM, Inbox, настройки | Главное окно AgencyOS |
+| Dream (логин, LetterBot) | **Скрытое** окно на ПК (не видно) |
+| Google Drive, материалы | **Видимое** окно AgencyOS |
+| Chromium / Playwright | **Только на ПК**, не на Render |
 
-## Установка (разработка)
+## Установка для операторов
 
-1. В корне сервера:
+1. Скачайте `release/desktop-030/AgencyOS-Setup-0.3.0.exe`
+2. Установите (можно поверх старой версии)
+3. Запустите AgencyOS
+4. Войдите в CRM
+5. В сайдбаре **Authorization** → **On** у нужной анкеты
+6. Inbox / LetterBot / Google Drive — в главном окне
 
-```powershell
-npm install
-npm start
-```
+## Чеклист «всё работает»
 
-2. В папке `desktop/`:
+- [ ] Нет окна «запустился без связи с программой»
+- [ ] Видны анкеты (Authorization)
+- [ ] On → статус Online
+- [ ] Inbox открывается
+- [ ] LetterBot Start не серый
+- [ ] Google Drive → окно AgencyOS (не Chrome)
+- [ ] Закрыл программу → открыл → анкеты On сохранились
 
-```powershell
-cd desktop
-npm install
-npm start
-```
-
-По умолчанию программа подключается к `https://agencyos-server-096a.onrender.com`.
-
-### Другой сервер
-
-```powershell
-$env:AGENCYOS_SERVER_URL="http://localhost:3000"
-npm start
-```
-
-или
-
-```powershell
-npm start -- --server=http://localhost:3000
-```
-
-## Сборка .exe
+## Сборка .exe (разработка)
 
 ```powershell
 cd desktop
@@ -50,25 +39,10 @@ $env:CSC_IDENTITY_AUTO_DISCOVERY="false"
 npm run dist
 ```
 
-Готовый установщик: `release/desktop/AgencyOS-Setup-0.2.0.exe`
+Установщик: `release/desktop-030/AgencyOS-Setup-0.3.0.exe`
 
-Портативная версия без установки: `release/desktop/win-unpacked/AgencyOS.exe`
+## LetterBot
 
-## Автообновление
-
-В `package.json` → `build.publish.url` укажите URL, где будут лежать релизы (generic provider).
-Пока URL примерный — обновления в prod настроим после первого релиза.
-
-## LetterBot (v0.2)
-
-LetterBot отправляет письма **локально** через окно Dream на вашем ПК:
-
-1. В CRM: сохраните текст письма (Save), нажмите **Start mailing**.
-2. Desktop открывает страницы Dream `bot/` и `bot/send`, сохраняет шаблон и жмёт Send.
-3. Каждые ~10 сек — повторная отправка; по интервалу — обновление шаблона.
-
-**Нужно:** профиль **On**, окно Dream открыто (после Connect).
-
-## Что дальше
-- Автоопределение анкеты по Dream-сессии.
-- Launcher / подпись Windows.
+1. Анкета **On**
+2. Сохраните письмо (Save)
+3. **Start mailing** — отправка идёт через скрытое окно Dream на ПК

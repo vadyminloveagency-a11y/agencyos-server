@@ -539,7 +539,7 @@ async function openWorkspaceDreamUrl(url) {
   if (isDreamUrl) {
     if (!activeProfileId) throw new Error('Сначала включите анкету (On).');
     if (!window.agencyElectron?.openDreamUrl) {
-      throw new Error('Откройте CRM в программе AgencyOS Desktop v0.2.0 (не в браузере).');
+      throw new Error('Откройте CRM в программе AgencyOS Desktop v0.3.0 (не в браузере).');
     }
     const result = await window.agencyElectron.openDreamUrl(activeProfileId, targetUrl);
     if (!result?.ok) throw new Error(result?.error || 'Could not open Dream window');

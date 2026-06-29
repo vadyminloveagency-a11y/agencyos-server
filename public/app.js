@@ -25,13 +25,15 @@ const AGENCY_ELECTRON_SHELL = /Electron/i.test(navigator.userAgent || '');
 const AGENCY_DESKTOP_CLIENT = AGENCY_ELECTRON_SHELL || Boolean(window.agencyElectron);
 const AGENCY_DESKTOP_SESSION_KEY = 'agencyos_desktop_session_id';
 if (AGENCY_DESKTOP_CLIENT) {
-  const desktopSessionId = new URLSearchParams(window.location.search).get('desktopVersion') || 'desktop';
-  if (localStorage.getItem(AGENCY_DESKTOP_SESSION_KEY) !== desktopSessionId) {
+  const desktopVersion = new URLSearchParams(window.location.search).get('desktopVersion') || '';
+  const releaseTrack = String(desktopVersion || 'desktop').split('.').slice(0, 1).join('.') || 'desktop';
+  const storedTrack = localStorage.getItem(AGENCY_DESKTOP_SESSION_KEY) || '';
+  if (storedTrack && storedTrack !== releaseTrack && /^\d+$/.test(releaseTrack) && /^\d+$/.test(storedTrack)) {
     Object.keys(localStorage)
       .filter(key => key.startsWith('dream_team_lady_connected_'))
       .forEach(key => localStorage.removeItem(key));
-    localStorage.setItem(AGENCY_DESKTOP_SESSION_KEY, desktopSessionId);
   }
+  if (releaseTrack) localStorage.setItem(AGENCY_DESKTOP_SESSION_KEY, releaseTrack);
 }
 const EMBEDDED_INDEX_PARAMS = new URLSearchParams(window.location.search);
 if (window.self !== window.top && EMBEDDED_INDEX_PARAMS.get('embedded') === '1') {
@@ -82,7 +84,7 @@ checkAgencyServerCapabilities();
 
 if (AGENCY_ELECTRON_SHELL && !window.agencyElectron) {
   window.setTimeout(() => {
-    alert('AgencyOS Desktop запустился без связи с программой. Переустановите AgencyOS-Setup-0.2.0.exe и перезапустите.');
+    alert('AgencyOS Desktop запустился без связи с программой. Переустановите AgencyOS-Setup-0.3.0.exe и перезапустите.');
   }, 1200);
 }
 
@@ -1383,7 +1385,7 @@ async function openDreamUrl(url) {
     throw new Error('Сначала выберите и включите анкету (On).');
   }
   if (!window.agencyElectron?.openDreamUrl) {
-    throw new Error('Ссылки Dream открываются только в AgencyOS Desktop v0.2.0.');
+    throw new Error('Ссылки Dream работают только в AgencyOS Desktop v0.3.0.');
   }
   const result = await window.agencyElectron.openDreamUrl(activeProfileId, targetUrl);
   if (!result?.ok) throw new Error(result?.error || 'Could not open Dream window');

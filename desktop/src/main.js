@@ -1,12 +1,13 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { DreamProfileManager } from './dream-profiles.js';
 import { LetterBotRunner } from './letterbot-runner.js';
+import { openAgencyContentWindow } from './content-windows.js';
 import { readConfig, resolveServerUrl, writeConfig, pickWorkingServerUrl, DEFAULT_SERVER_URL } from './config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const APP_VERSION = '0.2.0';
+const APP_VERSION = '0.3.0';
 const isDev = process.argv.includes('--dev');
 
 let mainWindow = null;
@@ -65,16 +66,16 @@ async function handleWindowOpenUrl(url) {
     if (profileId && dreamProfiles) {
       try {
         await dreamProfiles.openDreamUrl(profileId, target);
-      } catch {
-        await shell.openExternal(target).catch(() => {});
+      } catch (error) {
+        console.warn('[AgencyOS] Could not open Dream URL in background window:', error?.message || error);
       }
       return;
     }
-    await shell.openExternal(target).catch(() => {});
+    openAgencyContentWindow(target);
     return;
   }
   if (/^https?:\/\//i.test(target)) {
-    await shell.openExternal(target).catch(() => {});
+    openAgencyContentWindow(target);
   }
 }
 
@@ -87,7 +88,7 @@ function createMainWindow() {
     title: 'AgencyOS',
     autoHideMenuBar: !isDev,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false
@@ -102,6 +103,10 @@ function createMainWindow() {
     dreamProfiles,
     authSession: mainWindow.webContents.session,
     serverUrl
+  });
+
+  mainWindow.webContents.on('preload-error', (_event, preloadPath, error) => {
+    console.error('[AgencyOS] preload failed:', preloadPath, error?.message || error);
   });
 
   mainWindow.webContents.on('did-fail-load', (_event, code, description, validatedURL) => {
@@ -148,12 +153,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle('agency:open-external-url', async (_event, url) => {
     try {
-      const target = String(url || '').trim();
-      if (!/^https?:\/\//i.test(target)) {
-        return { ok: false, error: 'Invalid URL' };
-      }
-      await shell.openExternal(target);
-      return { ok: true, url: target };
+      return openAgencyContentWindow(url);
     } catch (error) {
       return { ok: false, error: error.message || 'Could not open link' };
     }
