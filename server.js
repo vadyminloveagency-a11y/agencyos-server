@@ -507,12 +507,14 @@ function cleanWorkspaceAttachments(value) {
       const url = localUrl || remoteUrl;
       const dedupeKey = localUrl || remoteUrl;
       if (!dedupeKey || seen.has(dedupeKey)) return null;
+      const label = String(item?.label || '');
+      if (String(item?.type || '').toLowerCase() !== 'video' && /video\s+(?:preview|poster|thumb|thumbnail)/i.test(label)) return null;
       if (workspaceMediaUrlLooksPageChrome(remoteUrl || url)) return null;
       if (remoteUrl && !workspaceMediaUrlLooksLikeAttachment(remoteUrl, item?.type)) return null;
       seen.add(dedupeKey);
       const rawType = String(item?.type || '').toLowerCase();
       const type = rawType === 'video' || /\.(mp4|webm|mov|m4v)(?:[?#]|$)/i.test(url) ? 'video' : 'image';
-      return { type, url, sourceUrl: localUrl ? remoteUrl : '', localUrl, label: item?.label || '' };
+      return { type, url, sourceUrl: localUrl ? remoteUrl : '', localUrl, label };
     })
     .filter(Boolean)
     .slice(0, 12);
@@ -3757,7 +3759,7 @@ async function sendWorkspaceReplyDirect(profileId, composeUrl = '', replyText = 
   return { ok: true, url: response.url || sendUrl, background: true };
 }
 
-function collectWorkspaceLetterHtml(html = '', sourceUrl = DREAM_INBOX_URL, fallbackName = '', fallbackId = '', directionOverride = '') {
+function collectWorkspaceLetterHtml(html = '', sourceUrl = DREAM_INBOX_URL, fallbackName = '', fallbackId = '', directionOverride = '', hints = {}) {
   if (dreamPageLooksLoggedOut(html, sourceUrl)) return { requiresLogin: true };
   const direction = directionOverride || (/[?&]mode=sent\b/i.test(sourceUrl) ? 'outgoing' : 'incoming');
   const pageText = htmlToText(html);
@@ -3810,6 +3812,8 @@ function collectWorkspaceLetterHtml(html = '', sourceUrl = DREAM_INBOX_URL, fall
   const addAttachment = (type, url, label = '') => {
     const cleanUrl = String(url || '').trim();
     if (!cleanUrl || seenAttachments.has(cleanUrl)) return;
+    const cleanLabel = cleanWorkspaceText(label || '');
+    if (type !== 'video' && /video\s+(?:preview|poster|thumb|thumbnail)/i.test(cleanLabel)) return;
     if (
       !/(^|\.)dream-singles\.com\//i.test(cleanUrl) &&
       !/profile-photos-cdn\.dream-singles\.com\//i.test(cleanUrl) &&
@@ -3817,7 +3821,7 @@ function collectWorkspaceLetterHtml(html = '', sourceUrl = DREAM_INBOX_URL, fall
     ) return;
     if (!workspaceMediaUrlLooksLikeAttachment(cleanUrl, type)) return;
     seenAttachments.add(cleanUrl);
-    attachments.push({ type, url: cleanUrl, label: cleanWorkspaceText(label || '') });
+    attachments.push({ type, url: cleanUrl, label: cleanLabel });
   };
   const attachmentTypeForUrl = (url = '', context = '') => {
     const source = `${url} ${context}`;
@@ -3841,7 +3845,7 @@ function collectWorkspaceLetterHtml(html = '', sourceUrl = DREAM_INBOX_URL, fall
     const poster = absoluteDreamUrl(attrFromTag(block, 'poster'), sourceUrl);
     if (src) addAttachment('video', src, 'Video');
     if (sourceSrc) addAttachment('video', sourceSrc, 'Video');
-    if (!src && !sourceSrc && poster) addAttachment('image', poster, 'Video preview');
+    if (!src && !sourceSrc && poster && hints.hasPhoto === true) addAttachment('image', poster, 'Photo');
   }
   for (const anchor of attachmentCandidateHtml.matchAll(/<a\b[^>]*href=["'][^"']+\.(?:mp4|webm|mov|m4v|jpe?g|png|webp|gif)(?:[?#][^"']*)?["'][^>]*>/gi)) {
     const href = absoluteDreamUrl(attrFromTag(anchor[0], 'href'), sourceUrl);
@@ -3874,6 +3878,9 @@ function collectWorkspaceLetterHtml(html = '', sourceUrl = DREAM_INBOX_URL, fall
     if (type) addAttachment(type, url, type === 'video' ? 'Video' : 'Photo');
   }
 
+  const filteredAttachments = hints.hasVideo === true && hints.hasPhoto !== true
+    ? attachments.filter(item => item.type === 'video')
+    : attachments;
   const replyUrl = findWorkspaceComposeUrl(html, sourceUrl) || deriveWorkspaceComposeUrlFromReadUrl(sourceUrl);
   return {
     requiresLogin: false,
@@ -3882,7 +3889,7 @@ function collectWorkspaceLetterHtml(html = '', sourceUrl = DREAM_INBOX_URL, fall
     bodyText,
     sourceUrl,
     replyUrl,
-    attachments: attachments.slice(0, 12),
+    attachments: filteredAttachments.slice(0, 12),
     conversation: bodyText ? [{
       direction: direction === 'outgoing' ? 'outgoing' : 'incoming',
       author: direction === 'outgoing' ? 'Me' : (fallbackName || ''),
@@ -6766,7 +6773,11 @@ app.post('/api/workspace/read-letter', async (req, res) => {
       page.url || url.href,
       String(req.body?.name || '').trim(),
       String(req.body?.id || '').trim(),
-      String(req.body?.direction || '').trim()
+      String(req.body?.direction || '').trim(),
+      {
+        hasPhoto: req.body?.hasPhoto === true,
+        hasVideo: req.body?.hasVideo === true
+      }
     );
     if (req.body?.mediaOnly === true) {
       const attachments = cleanWorkspaceAttachments(letter.attachments || []);
