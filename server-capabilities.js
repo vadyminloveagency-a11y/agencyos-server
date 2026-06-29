@@ -1,5 +1,13 @@
+export function serverPlaywrightDisableReason() {
+  const explicit = String(process.env.DISABLE_SERVER_PLAYWRIGHT || '').trim();
+  if (explicit === '1') return 'env';
+  if (explicit === '0') return '';
+  if (String(process.env.RENDER || '').toLowerCase() === 'true') return 'render';
+  return '';
+}
+
 export function isServerPlaywrightDisabled() {
-  return String(process.env.DISABLE_SERVER_PLAYWRIGHT || '').trim() === '1';
+  return Boolean(serverPlaywrightDisableReason());
 }
 
 export function assertServerPlaywrightAllowed(action = 'use Playwright on the server') {

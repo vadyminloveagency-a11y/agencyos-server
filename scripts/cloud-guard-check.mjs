@@ -13,4 +13,10 @@ try {
   if (error.code !== 'SERVER_PLAYWRIGHT_DISABLED') throw error;
 }
 
+delete process.env.DISABLE_SERVER_PLAYWRIGHT;
+process.env.RENDER = 'true';
+if (!isServerPlaywrightDisabled()) {
+  throw new Error('Expected RENDER=true to auto-disable cloud Playwright');
+}
+
 console.log('cloud guard check passed');

@@ -65,9 +65,9 @@ const DREAM_XHR_HEADERS = {
 
 import * as letterBotService from './letterbot-service.js';
 import { ensurePlaywrightChromium, resolvePlaywrightBrowsersPath } from './playwright-browsers.js';
-import { assertServerPlaywrightAllowed, isServerPlaywrightDisabled } from './server-capabilities.js';
-const AGENCYOS_SERVER_VERSION = '0.1.3';
-const AGENCYOS_UI_BUILD = '20260629-12';
+import { assertServerPlaywrightAllowed, isServerPlaywrightDisabled, serverPlaywrightDisableReason } from './server-capabilities.js';
+const AGENCYOS_SERVER_VERSION = '0.1.4';
+const AGENCYOS_UI_BUILD = '20260629-13';
 const DREAM_MAX_BROWSER_SESSIONS = isServerPlaywrightDisabled()
   ? 0
   : Math.max(1, Number(process.env.DREAM_MAX_BROWSER_SESSIONS) || 1);
@@ -124,6 +124,7 @@ app.get('/api/health', (req, res) => {
     serverVersion: AGENCYOS_SERVER_VERSION,
     uiBuild: AGENCYOS_UI_BUILD,
     serverPlaywright: !isServerPlaywrightDisabled(),
+    serverPlaywrightMode: serverPlaywrightDisableReason() || 'enabled',
     letterBotBuild: letterBotService.LETTERBOT_BUILD_ID,
     dreamBrowsers: dreamBrowserSessions.size,
     dreamBrowserLimit: isServerPlaywrightDisabled() ? 0 : DREAM_MAX_BROWSER_SESSIONS,
