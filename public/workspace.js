@@ -2964,7 +2964,11 @@ function renderConversation(letter, fallbackName, fallbackPhotoUrl = '') {
     const fallbackDirection = letterDirection === 'outgoing' ? 'outgoing' : 'incoming';
     return attachmentsHtml
       ? `<div class="workspace-message-group ${fallbackDirection}">
-          <div class="workspace-attachment-row">${attachmentsHtml}</div>
+          <div class="workspace-message-line">
+            <article class="workspace-chat-message ${fallbackDirection}">
+              <div class="workspace-attachment-row">${attachmentsHtml}</div>
+            </article>
+          </div>
         </div>`
       : '';
   }
@@ -2991,9 +2995,9 @@ function renderConversation(letter, fallbackName, fallbackPhotoUrl = '') {
             <p>${escapeHtml(message.text || '')}</p>
             ${translationLoading ? '<div class="workspace-translation-result loading">Translating...</div>' : ''}
             ${translationText ? `<div class="workspace-translation-result">${escapeHtml(translationText)}</div>` : ''}
+            ${messageAttachments}
           </article>
         </div>
-        ${messageAttachments}
       </div>
     `;
   }).join('');

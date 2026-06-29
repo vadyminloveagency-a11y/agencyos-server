@@ -4642,31 +4642,37 @@ body.workspace-embedded .workspace-chat-message p {
 }
 
 body.workspace-embedded .workspace-attachment-row {
-  margin-top: 14px !important;
+  margin-top: 6px !important;
+  width: fit-content !important;
+  max-width: 100% !important;
+  display: block !important;
 }
 
 body.workspace-embedded .workspace-attachments {
   width: fit-content !important;
+  max-width: 100% !important;
 }
 
 body.workspace-embedded .workspace-attachments summary {
-  min-width: 138px !important;
-  height: 34px !important;
-  padding: 0 18px !important;
-  border: 1px solid #5b8ba8 !important;
-  border-radius: 8px !important;
-  background: #5b8ba8 !important;
-  color: #ffffff !important;
-  font-size: 11px !important;
-  font-weight: 700 !important;
-  text-transform: uppercase !important;
-  box-shadow: 0 14px 24px rgba(39, 74, 96, .18) !important;
+  min-width: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #b06a52 !important;
+  font-size: 0 !important;
+  font-weight: 400 !important;
+  box-shadow: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
 }
 
 body.workspace-embedded .workspace-attachments summary::before {
-  content: "\1F4CE ";
-  margin-right: 10px;
-  font-size: 12px;
+  display: none !important;
+  content: none !important;
 }
 
 body.workspace-embedded .workspace-header-letters {
@@ -4773,15 +4779,11 @@ body.workspace-embedded .workspace-message-top {
 }
 
 body.workspace-embedded .workspace-attachments {
-  margin-top: 8px !important;
-}
-
-body.workspace-embedded .workspace-attachments summary {
-  display: none !important;
+  margin-top: 0 !important;
 }
 
 body.workspace-embedded .workspace-attachment-previews {
-  margin-top: 0 !important;
+  margin-top: 8px !important;
 }
 
 /* Final alignment pass for the open-letter view. */
@@ -9618,15 +9620,15 @@ body.workspace-embedded .workspace-control-panel .workspace-profile-sync {
 /* Letter attachments: clearer toggle and photos that fit the visible reader area. */
 body.workspace-embedded .workspace-attachments summary {
   min-width: 0 !important;
-  width: 28px !important;
-  height: 28px !important;
+  width: auto !important;
+  height: auto !important;
   padding: 0 !important;
   border: none !important;
   background: transparent !important;
-  color: #8f422c !important;
+  color: #b06a52 !important;
   display: inline-flex !important;
   align-items: center !important;
-  justify-content: center !important;
+  justify-content: flex-start !important;
   gap: 0 !important;
   font-size: 0 !important;
   font-weight: 400 !important;
@@ -9661,13 +9663,13 @@ body.workspace-embedded .workspace-attachments:not([open]) .workspace-attachment
 body.workspace-embedded .workspace-attachments summary,
 body.workspace-dark-theme.workspace-embedded .workspace-attachments summary {
   min-width: 0 !important;
-  width: 28px !important;
-  height: 28px !important;
+  width: auto !important;
+  height: auto !important;
   padding: 0 !important;
   border: none !important;
   border-radius: 0 !important;
   background: transparent !important;
-  color: #d27054 !important;
+  color: #b06a52 !important;
   box-shadow: none !important;
 }
 
@@ -9678,11 +9680,12 @@ body.workspace-dark-theme.workspace-embedded .workspace-attachments summary::bef
 }
 
 body.workspace-embedded .workspace-attachment-eye {
-  width: 18px !important;
-  height: 18px !important;
+  width: 17px !important;
+  height: 17px !important;
   stroke: currentColor !important;
-  stroke-width: 1.8 !important;
+  stroke-width: 1.7 !important;
   fill: none !important;
+  display: block !important;
 }
 
 body.workspace-embedded .workspace-attachment-loading-dots {
@@ -9756,7 +9759,7 @@ body.workspace-embedded .workspace-reader.read-mode .workspace-message-stack {
 }
 
 body.workspace-embedded .workspace-attachment-row {
-  margin-top: 8px !important;
+  margin-top: 6px !important;
 }
 
 body.workspace-embedded .workspace-attachment-preview img,
@@ -9778,36 +9781,55 @@ body.workspace-embedded .workspace-reader.read-mode .workspace-message-stack::af
   flex: 0 0 24px !important;
 }
 
-/* Final attachment toggle color: override old incoming/outgoing blue/green rules. */
+/* Attachment eye: icon only under the letter, no pill bar. */
 body.workspace-embedded .workspace-shell .workspace-message-group.incoming .workspace-attachments summary,
-body.workspace-embedded .workspace-shell .workspace-message-group.outgoing .workspace-attachments summary {
-  min-width: 112px !important;
-  height: 28px !important;
-  padding: 0 12px !important;
-  border-color: rgba(210, 112, 84, .72) !important;
-  background: rgba(210, 112, 84, .14) !important;
-  color: #8f422c !important;
-  gap: 7px !important;
-  font-size: 10px !important;
-  font-weight: 800 !important;
+body.workspace-embedded .workspace-shell .workspace-message-group.outgoing .workspace-attachments summary,
+body.workspace-embedded .workspace-shell .workspace-message-group .workspace-attachments summary {
+  min-width: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #b06a52 !important;
+  gap: 0 !important;
+  font-size: 0 !important;
+  font-weight: 400 !important;
   box-shadow: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  opacity: .82 !important;
 }
 
-body.workspace-embedded .workspace-shell .workspace-message-group.incoming .workspace-attachments summary::before,
-body.workspace-embedded .workspace-shell .workspace-message-group.outgoing .workspace-attachments summary::before {
-  margin-right: 0 !important;
+body.workspace-embedded .workspace-shell .workspace-message-group.incoming .workspace-attachments summary:hover,
+body.workspace-embedded .workspace-shell .workspace-message-group.outgoing .workspace-attachments summary:hover,
+body.workspace-embedded .workspace-shell .workspace-message-group .workspace-attachments summary:hover,
+body.workspace-embedded .workspace-shell .workspace-message-group.incoming .workspace-attachments summary:focus-visible,
+body.workspace-embedded .workspace-shell .workspace-message-group.outgoing .workspace-attachments summary:focus-visible,
+body.workspace-embedded .workspace-shell .workspace-message-group .workspace-attachments summary:focus-visible {
   border: 0 !important;
   background: transparent !important;
   color: #d27054 !important;
-  font-size: 10px !important;
-  line-height: 1 !important;
+  opacity: 1 !important;
+  transform: none !important;
+  outline: none !important;
+}
+
+body.workspace-embedded .workspace-shell .workspace-message-group.incoming .workspace-attachments summary::before,
+body.workspace-embedded .workspace-shell .workspace-message-group.outgoing .workspace-attachments summary::before,
+body.workspace-embedded .workspace-shell .workspace-message-group .workspace-attachments summary::before {
+  display: none !important;
+  content: none !important;
 }
 
 body.workspace-dark-theme.workspace-embedded .workspace-shell .workspace-message-group.incoming .workspace-attachments summary,
-body.workspace-dark-theme.workspace-embedded .workspace-shell .workspace-message-group.outgoing .workspace-attachments summary {
-  border-color: rgba(210, 112, 84, .62) !important;
-  background: rgba(210, 112, 84, .18) !important;
-  color: #f0c5b8 !important;
+body.workspace-dark-theme.workspace-embedded .workspace-shell .workspace-message-group.outgoing .workspace-attachments summary,
+body.workspace-dark-theme.workspace-embedded .workspace-shell .workspace-message-group .workspace-attachments summary {
+  border: 0 !important;
+  background: transparent !important;
+  color: #e28b70 !important;
 }
 
 /* Inline letter media: no dark preview card, no black bars, no caption strip. */
