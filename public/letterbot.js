@@ -26,6 +26,9 @@
   const previewCloseBtn = document.getElementById('agencyLetterBotPreviewClose');
 
   const EXPECTED_BUILD = '20260629-11';
+  const LETTERBOT_RUNTIME_MESSAGE = 'Отправка на сервере отключена, чтобы Render не падал. LetterBot будет работать с вашего ПК в следующем обновлении. Текст письма можно сохранять.';
+
+  let letterBotSendingBlocked = false;
 
   async function parseApiJson(response) {
     const contentType = String(response.headers.get('content-type') || '').toLowerCase();
@@ -76,6 +79,33 @@
     highlight.innerHTML = `${formatLetterTextHtml(textarea.value)}<br>`;
     highlight.scrollTop = textarea.scrollTop;
     highlight.scrollLeft = textarea.scrollLeft;
+  }
+
+  function syncLetterBotRuntimeControls(message = LETTERBOT_RUNTIME_MESSAGE) {
+    const blocked = letterBotSendingBlocked === true;
+    if (startBtn) startBtn.disabled = blocked || letterBotState?.enabled === true;
+    if (sendNowBtn) sendNowBtn.disabled = blocked;
+    if (countdownEl && blocked) countdownEl.textContent = message;
+    if (errorEl) {
+      if (blocked) {
+        errorEl.textContent = message;
+        errorEl.classList.remove('hidden');
+      } else if (!String(letterBotState?.lastError || '').trim()) {
+        errorEl.textContent = '';
+        errorEl.classList.add('hidden');
+      }
+    }
+  }
+
+  function setLetterBotRuntimeBlocked(blocked, message = LETTERBOT_RUNTIME_MESSAGE) {
+    letterBotSendingBlocked = blocked === true;
+    syncLetterBotRuntimeControls(message);
+  }
+
+  function blockLetterBotAction() {
+    if (!letterBotSendingBlocked) return false;
+    setLetterBotRuntimeBlocked(true);
+    return true;
   }
 
   function profileOnline() {
@@ -142,13 +172,13 @@
     if (statTodayEl) statTodayEl.textContent = String(today);
     if (statSessionEl) statSessionEl.textContent = String(session);
 
-    if (countdownEl) {
+    if (countdownEl && !letterBotSendingBlocked) {
       countdownEl.textContent = running
         ? `~10 sec · refresh in ${formatCountdown(letterBotState.nextRunAt)}`
         : 'Press Start mailing to send this letter';
     }
 
-    if (errorEl) {
+    if (errorEl && !letterBotSendingBlocked) {
       const message = String(letterBotState.lastError || '').trim();
       errorEl.textContent = message;
       errorEl.classList.toggle('hidden', !message);
@@ -166,6 +196,7 @@
     if (startBtn) startBtn.disabled = running;
     if (stopBtn) stopBtn.disabled = !running;
     if (clearBtn) clearBtn.disabled = running;
+    syncLetterBotRuntimeControls();
   }
 
   function syncMediaBarGlow() {
@@ -390,6 +421,7 @@
     try {
       const health = await fetch('/api/health').then(r => r.json()).catch(() => ({}));
       letterBotBuildId = String(health?.letterBotBuild || '');
+      setLetterBotRuntimeBlocked(health?.serverPlaywright === false);
       const result = await apiLetterBot('GET');
       letterBotState = result.letterbot || null;
       if (intervalInput && letterBotState) intervalInput.value = String(letterBotState.intervalMinutes || 20);
@@ -531,6 +563,7 @@
       .finally(() => { clearBtn.disabled = false; });
   });
   startBtn?.addEventListener('click', () => {
+    if (blockLetterBotAction()) return;
     startBtn.disabled = true;
     saveLetterBotConfig()
       .then(() => apiLetterBot('POST', '/start'))
@@ -541,8 +574,13 @@
         updateLetterBotStatus();
         startLetterBotPoll();
       })
-      .catch(error => alert(error.message || 'Could not start LetterBot'))
-      .finally(() => { startBtn.disabled = false; });
+      .catch(error => {
+        if (errorEl) {
+          errorEl.textContent = error.message || 'Could not start LetterBot';
+          errorEl.classList.remove('hidden');
+        }
+      })
+      .finally(() => { updateLetterBotStatus(); });
   });
   stopBtn?.addEventListener('click', () => {
     stopBtn.disabled = true;
@@ -556,6 +594,7 @@
       .finally(() => { stopBtn.disabled = false; });
   });
   sendNowBtn?.addEventListener('click', () => {
+    if (blockLetterBotAction()) return;
     sendNowBtn.disabled = true;
     saveLetterBotConfig()
       .then(() => apiLetterBot('POST', '/send-now'))
@@ -564,8 +603,13 @@
         renderLetterBotEntries();
         updateLetterBotStatus();
       })
-      .catch(error => alert(error.message || 'Could not send letter'))
-      .finally(() => { sendNowBtn.disabled = false; });
+      .catch(error => {
+        if (errorEl) {
+          errorEl.textContent = error.message || 'Could not send letter';
+          errorEl.classList.remove('hidden');
+        }
+      })
+      .finally(() => { updateLetterBotStatus(); });
   });
   window.syncAgencyLetterBotAccess = syncLetterBotAccess;
   window.loadAgencyLetterBotPanel = loadLetterBotPanel;
