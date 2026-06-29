@@ -24467,7 +24467,6 @@ body.mandarin-home-active.app-dark-theme #agencyProfilePowerToggle.agency-profil
   color: #f5eee9 !important;
 }
 
-body.mandarin-home-active .agency-letterbot-panel,
 body.mandarin-home-active .agency-coming-soon-panel {
   min-height: 100vh !important;
   display: grid !important;
@@ -24478,6 +24477,7 @@ body.mandarin-home-active .agency-coming-soon-panel {
   color: #f5eee9 !important;
 }
 
+body.mandarin-home-active .agency-letterbot-panel.hidden,
 body.mandarin-home-active .agency-coming-soon-panel.hidden {
   display: none !important;
 }
@@ -27347,6 +27347,7 @@ body.mandarin-home-active.agency-shell-collapsed .agency-account-manager,
 body.mandarin-home-active.agency-shell-collapsed .agency-dashboard-panel,
 body.mandarin-home-active.agency-shell-collapsed .agency-favorites-panel,
 body.mandarin-home-active.agency-shell-collapsed .agency-inbox-panel,
+body.mandarin-home-active.agency-shell-collapsed .agency-letterbot-panel,
 body.mandarin-home-active.agency-shell-collapsed .agency-coming-soon-panel {
   width: calc((100vw - 68px) / var(--main-page-zoom)) !important;
 }
@@ -27395,7 +27396,11 @@ body.mandarin-home-active.app-dark-theme #agencyInboxFrame {
   background: #1b1816 !important;
 }
 
-body.mandarin-home-active .agency-letterbot-panel,
+body.mandarin-home-active .agency-letterbot-panel {
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
 body.mandarin-home-active .agency-coming-soon-panel {
   padding: 0 !important;
   overflow: hidden !important;
@@ -27416,6 +27421,29 @@ body.mandarin-home-active.agency-shell-collapsed.agency-panel-inbox .agency-shel
 }
 
 body.mandarin-home-active.agency-panel-inbox .agency-inbox-panel {
+  width: 100% !important;
+  height: 100vh !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  zoom: 1 !important;
+  transform: none !important;
+}
+
+body.mandarin-home-active.agency-panel-letterbot .agency-shell-main {
+  width: calc(100vw - 212px) !important;
+  height: 100vh !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  zoom: 1 !important;
+  transform: none !important;
+}
+
+body.mandarin-home-active.agency-shell-collapsed.agency-panel-letterbot .agency-shell-main {
+  width: calc(100vw - 68px) !important;
+}
+
+body.mandarin-home-active.agency-panel-letterbot .agency-letterbot-panel:not(.hidden) {
   width: 100% !important;
   height: 100vh !important;
   min-height: 0 !important;
@@ -29058,7 +29086,7 @@ body.mandarin-home-active .agency-dashboard-empty {
 }
 
 /* LetterBot panel */
-body.mandarin-home-active.agency-panel-letterbot .agency-letterbot-panel {
+body.mandarin-home-active.agency-panel-letterbot .agency-letterbot-panel:not(.hidden) {
   display: flex !important;
   flex-direction: column !important;
   height: 100vh !important;
