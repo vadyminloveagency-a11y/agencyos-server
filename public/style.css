@@ -29186,6 +29186,7 @@ body.mandarin-home-active.app-dark-theme .agency-letterbot-btn {
 }
 
 body.mandarin-home-active .agency-letterbot-status,
+body.mandarin-home-active .agency-letterbot-sent-count,
 body.mandarin-home-active .agency-letterbot-audience,
 body.mandarin-home-active .agency-letterbot-countdown {
   font-size: 13px;
@@ -29193,6 +29194,7 @@ body.mandarin-home-active .agency-letterbot-countdown {
 }
 
 body.mandarin-home-active.app-dark-theme .agency-letterbot-status,
+body.mandarin-home-active.app-dark-theme .agency-letterbot-sent-count,
 body.mandarin-home-active.app-dark-theme .agency-letterbot-audience,
 body.mandarin-home-active.app-dark-theme .agency-letterbot-countdown {
   color: #b9aea4;

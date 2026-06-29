@@ -6,6 +6,7 @@
   const content = document.getElementById('agencyLetterBotContent');
   const authorizeBtn = document.getElementById('agencyLetterBotAuthorizeBtn');
   const statusEl = document.getElementById('agencyLetterBotStatus');
+  const sentCountEl = document.getElementById('agencyLetterBotSentCount');
   const countdownEl = document.getElementById('agencyLetterBotCountdown');
   const intervalInput = document.getElementById('agencyLetterBotInterval');
   const entriesRoot = document.getElementById('agencyLetterBotEntries');
@@ -17,6 +18,7 @@
 
   let letterBotState = null;
   let letterBotCountdownTimer = null;
+  let letterBotPollTimer = null;
 
   function activeProfileId() {
     return String(window.activeProfileId || localStorage.getItem('dream_crm_profile_id') || '');
@@ -59,11 +61,17 @@
     const parts = [];
     if (letterBotState.enabled) parts.push('Running');
     else parts.push('Stopped');
-    if (letterBotState.lastSuccessAt) parts.push(`Last OK: ${new Date(letterBotState.lastSuccessAt).toLocaleString()}`);
+    if (letterBotState.lastSuccessAt) parts.push(`Last sent: ${new Date(letterBotState.lastSuccessAt).toLocaleString()}`);
+    else if (letterBotState.lastTemplateAt) parts.push(`Template saved: ${new Date(letterBotState.lastTemplateAt).toLocaleString()}`);
     if (letterBotState.lastError) parts.push(`Error: ${letterBotState.lastError}`);
     if (statusEl) statusEl.textContent = parts.join(' · ');
+    if (sentCountEl) {
+      const session = Number(letterBotState.menSentSession) || 0;
+      const today = Number(letterBotState.menSentToday) || 0;
+      sentCountEl.textContent = `Men processed: ${session} (session) · ${today} (today)`;
+    }
     if (countdownEl) countdownEl.textContent = letterBotState.enabled
-      ? `Next letter: ${formatCountdown(letterBotState.nextRunAt)}`
+      ? `Sending every ~10 sec · Next template: ${formatCountdown(letterBotState.nextRunAt)}`
       : 'LetterBot is stopped';
     if (startBtn) startBtn.disabled = letterBotState.enabled;
     if (stopBtn) stopBtn.disabled = !letterBotState.enabled;
@@ -72,6 +80,28 @@
   function startCountdownTimer() {
     if (letterBotCountdownTimer) clearInterval(letterBotCountdownTimer);
     letterBotCountdownTimer = window.setInterval(updateLetterBotStatus, 1000);
+  }
+
+  function stopLetterBotPoll() {
+    if (letterBotPollTimer) clearInterval(letterBotPollTimer);
+    letterBotPollTimer = null;
+  }
+
+  function startLetterBotPoll() {
+    stopLetterBotPoll();
+    if (!letterBotState?.enabled) return;
+    letterBotPollTimer = window.setInterval(() => {
+      if (!letterBotState?.enabled) {
+        stopLetterBotPoll();
+        return;
+      }
+      apiLetterBot('GET')
+        .then(result => {
+          letterBotState = result.letterbot || letterBotState;
+          updateLetterBotStatus();
+        })
+        .catch(() => {});
+    }, 5000);
   }
 
   async function readVideoDuration(file) {
@@ -180,6 +210,7 @@
       renderLetterBotEntries();
       updateLetterBotStatus();
       startCountdownTimer();
+      startLetterBotPoll();
     } catch (error) {
       if (statusEl) statusEl.textContent = error.message || 'Could not load LetterBot';
     }
@@ -317,6 +348,7 @@
         letterBotState = result.letterbot;
         renderLetterBotEntries();
         updateLetterBotStatus();
+        startLetterBotPoll();
       })
       .catch(error => alert(error.message || 'Could not start LetterBot'))
       .finally(() => { startBtn.disabled = false; });
@@ -327,6 +359,7 @@
       .then(result => {
         letterBotState = result.letterbot;
         updateLetterBotStatus();
+        stopLetterBotPoll();
       })
       .catch(error => alert(error.message || 'Could not stop LetterBot'))
       .finally(() => { stopBtn.disabled = false; });

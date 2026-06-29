@@ -7,7 +7,9 @@ const DREAM_LETTER_BOT_SEND_URL = 'https://www.dream-singles.com/members/messagi
 const LETTERBOT_DEFAULT_AUDIENCE = 'online';
 const LETTERBOT_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const LETTERBOT_MAX_PHOTO_BYTES = 8 * 1024 * 1024;
+const LETTERBOT_SEND_TICK_MS = 10_000;
 const letterBotRunsInFlight = new Map();
+const letterBotSendLoops = new Map();
 
 function defaultLetterBotConfig() {
   return {
@@ -16,9 +18,13 @@ function defaultLetterBotConfig() {
     audienceFilter: LETTERBOT_DEFAULT_AUDIENCE,
     queueIndex: 0,
     lastRunAt: '',
+    lastTemplateAt: '',
     lastSuccessAt: '',
     lastError: '',
     nextRunAt: '',
+    menSentSession: 0,
+    menSentToday: 0,
+    menSentDay: '',
     entries: []
   };
 }
@@ -43,9 +49,13 @@ function normalizeLetterBotConfig(raw) {
     audienceFilter: String(raw.audienceFilter || LETTERBOT_DEFAULT_AUDIENCE),
     queueIndex: Math.max(0, Number(raw.queueIndex) || 0),
     lastRunAt: String(raw.lastRunAt || ''),
+    lastTemplateAt: String(raw.lastTemplateAt || ''),
     lastSuccessAt: String(raw.lastSuccessAt || ''),
     lastError: String(raw.lastError || ''),
     nextRunAt: String(raw.nextRunAt || ''),
+    menSentSession: Math.max(0, Number(raw.menSentSession) || 0),
+    menSentToday: Math.max(0, Number(raw.menSentToday) || 0),
+    menSentDay: String(raw.menSentDay || ''),
     entries
   };
 }
@@ -91,9 +101,12 @@ function publicLetterBotConfig(profile, profileId, mediaRoot) {
     audienceLabel: 'Online gentlemen (exclude Favorites, Contacts)',
     queueIndex: config.queueIndex,
     lastRunAt: config.lastRunAt,
+    lastTemplateAt: config.lastTemplateAt,
     lastSuccessAt: config.lastSuccessAt,
     lastError: config.lastError,
     nextRunAt: config.nextRunAt,
+    menSentSession: config.menSentSession,
+    menSentToday: config.menSentToday,
     entries: config.entries.map(entry => publicLetterBotEntry(entry, profileId, mediaRoot))
   };
 }
@@ -138,6 +151,25 @@ function deleteLetterBotMedia(mediaRoot, entry) {
   if (fs.existsSync(absolute)) fs.unlinkSync(absolute);
 }
 
+function letterBotTodayKey(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
+function ensureLetterBotDailyCounter(config) {
+  const today = letterBotTodayKey();
+  if (config.menSentDay !== today) {
+    config.menSentDay = today;
+    config.menSentToday = 0;
+  }
+  return config;
+}
+
+function resetLetterBotSessionCounters(config) {
+  config.menSentSession = 0;
+  ensureLetterBotDailyCounter(config);
+  return config;
+}
+
 function pickLetterBotEntry(config) {
   const entries = (config.entries || []).filter(item => String(item.text || '').trim());
   if (!entries.length) return null;
@@ -145,13 +177,19 @@ function pickLetterBotEntry(config) {
   const entry = entries[index];
   return { entry, index, total: entries.length };
 }
+  const entries = (config.entries || []).filter(item => String(item.text || '').trim());
+  if (!entries.length) return null;
+  const index = config.queueIndex % entries.length;
+  const entry = entries[index];
+  return { entry, index, total: entries.length };
+}
 
-function scheduleLetterBotNext(profile, success = true) {
+function markLetterBotTemplateRun(profile, success = true) {
   const config = normalizeLetterBotConfig(profile.letterBot);
   const now = new Date();
   config.lastRunAt = now.toISOString();
+  config.lastTemplateAt = now.toISOString();
   if (success) {
-    config.lastSuccessAt = config.lastRunAt;
     config.lastError = '';
     const picked = pickLetterBotEntry(config);
     if (picked) config.queueIndex = (picked.index + 1) % picked.total;
@@ -160,6 +198,104 @@ function scheduleLetterBotNext(profile, success = true) {
   config.nextRunAt = next.toISOString();
   profile.letterBot = config;
   return config;
+}
+
+function markLetterBotSendSuccess(profile, increment = 1) {
+  const config = normalizeLetterBotConfig(profile.letterBot);
+  ensureLetterBotDailyCounter(config);
+  const delta = Math.max(0, Number(increment) || 0);
+  if (delta > 0) {
+    config.menSentSession = Math.max(0, Number(config.menSentSession) || 0) + delta;
+    config.menSentToday = Math.max(0, Number(config.menSentToday) || 0) + delta;
+  }
+  config.lastSuccessAt = new Date().toISOString();
+  config.lastError = '';
+  profile.letterBot = config;
+  return config;
+}
+
+async function readDreamMenSentCount(page) {
+  return page.evaluate(() => {
+    const direct = [
+      document.getElementById('sentCount'),
+      document.getElementById('lettersSent'),
+      document.querySelector('[data-sent-count]'),
+      document.querySelector('.sent-count'),
+      document.querySelector('#countSent')
+    ].filter(Boolean);
+    for (const node of direct) {
+      const value = parseInt(String(node.textContent || node.value || '').replace(/[^\d]/g, ''), 10);
+      if (Number.isFinite(value) && value >= 0) return value;
+    }
+    const text = document.body?.innerText || '';
+    const patterns = [
+      /(?:sent|processed|delivered)\s*[:\-]?\s*(\d+)/i,
+      /(\d+)\s*(?:men|gentlemen|letters?)\s*(?:sent|processed)/i,
+      /success(?:fully)?\s*sent\s*(\d+)/i
+    ];
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) return parseInt(match[1], 10);
+    }
+    return null;
+  }).catch(() => null);
+}
+
+function syncLetterBotMenSentFromDream(profile, dreamCount) {
+  if (!Number.isFinite(dreamCount) || dreamCount < 0) return;
+  const config = normalizeLetterBotConfig(profile.letterBot);
+  ensureLetterBotDailyCounter(config);
+  if (dreamCount > (Number(config.menSentSession) || 0)) {
+    const delta = dreamCount - (Number(config.menSentSession) || 0);
+    config.menSentSession = dreamCount;
+    config.menSentToday = Math.max(0, Number(config.menSentToday) || 0) + delta;
+  }
+  profile.letterBot = config;
+}
+
+function stopLetterBotSendLoop(profileId) {
+  const loop = letterBotSendLoops.get(String(profileId));
+  if (loop?.timer) clearInterval(loop.timer);
+  letterBotSendLoops.delete(String(profileId));
+}
+
+function startLetterBotSendLoop(deps, profileId) {
+  const id = String(profileId);
+  stopLetterBotSendLoop(id);
+  const state = { timer: null, busy: false };
+
+  const tick = () => {
+    if (state.busy || letterBotRunsInFlight.has(id)) return;
+    const db = deps.readDb();
+    const profile = db.profiles?.[id];
+    if (!profile || profile.active === false || !normalizeLetterBotConfig(profile.letterBot).enabled) {
+      stopLetterBotSendLoop(id);
+      return;
+    }
+    if (!deps.dreamSessions.has(id)) return;
+
+    state.busy = true;
+    trySendOneDreamLetter(deps, id)
+      .catch(error => console.warn(`[letterbot] send tick ${id}: ${error.message || error}`))
+      .finally(() => { state.busy = false; });
+  };
+
+  state.timer = setInterval(tick, LETTERBOT_SEND_TICK_MS);
+  if (typeof state.timer.unref === 'function') state.timer.unref();
+  letterBotSendLoops.set(id, state);
+  tick();
+}
+
+function restoreLetterBotSendLoops(deps) {
+  try {
+    const db = deps.readDb();
+    for (const profileId of Object.keys(db.profiles || {})) {
+      const config = normalizeLetterBotConfig(db.profiles[profileId]?.letterBot);
+      if (config.enabled) startLetterBotSendLoop(deps, profileId);
+    }
+  } catch (error) {
+    console.warn('[letterbot] could not restore send loops', error.message || error);
+  }
 }
 
 function profileLetterBotUser(db, profileId, currentAssignedUserForProfile) {
@@ -258,7 +394,65 @@ async function selectLetterBotOnlineFilter(page) {
   await page.waitForTimeout(500);
 }
 
-async function runLetterBotOnPage(page, entry, mediaAbsolutePath) {
+async function waitForDreamSendReady(page, timeoutMs = 45_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ready = await page.evaluate(() => {
+      const spam = document.getElementById('spam');
+      return spam?.value === 'Start';
+    });
+    if (ready) return true;
+    await page.waitForTimeout(800);
+  }
+  return false;
+}
+
+async function triggerDreamLetterSend(page) {
+  return page.evaluate(() => {
+    const spam = document.getElementById('spam');
+    const spamValue = spam?.value || '';
+    if (spamValue !== 'Start') {
+      return { ok: false, reason: `Dream is not ready to send (status: ${spamValue || 'waiting'})` };
+    }
+
+    const inputLastActivity = document.getElementById('inputLastActivity');
+    if (inputLastActivity?.options?.length > 1) {
+      inputLastActivity.selectedIndex = 1;
+      inputLastActivity.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    const onlineCheckbox = document.getElementById('onlineOnly');
+    if (onlineCheckbox) {
+      onlineCheckbox.checked = true;
+      onlineCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+    } else {
+      const labels = [...document.querySelectorAll('label')];
+      const onlineLabel = labels.find(node => /send gentlemen online/i.test(node.textContent || ''));
+      if (onlineLabel) {
+        onlineLabel.click();
+      } else {
+        const radios = [...document.querySelectorAll('input[type="radio"]')];
+        const onlineRadio = radios.find(input => /gentlemen online/i.test([
+          input.id,
+          input.name,
+          input.value,
+          input.closest('label')?.textContent
+        ].join(' ')));
+        if (onlineRadio) {
+          onlineRadio.checked = true;
+          onlineRadio.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }
+    }
+
+    const sendButton = document.querySelector('.btn-success');
+    if (!sendButton) return { ok: false, reason: 'Send button was not found on Letter Sendout page' };
+    sendButton.click();
+    return { ok: true };
+  });
+}
+
+async function saveLetterBotTemplate(page, entry, mediaAbsolutePath) {
   await openLetterBotComposePage(page);
   const editor = page.frameLocator('.cke_wysiwyg_frame.cke_reset').first();
   await editor.locator('body').click({ timeout: 10_000 }).catch(() => {});
@@ -296,14 +490,53 @@ async function runLetterBotOnPage(page, entry, mediaAbsolutePath) {
   if (!(await composeSaveButton.count())) throw new Error('Save button was not found on Letter Sendout page');
   await composeSaveButton.click({ timeout: 15_000 });
   await page.waitForTimeout(2500);
+}
 
+async function sendLetterBotOnDream(page) {
   await openLetterBotSendPage(page);
   await selectLetterBotOnlineFilter(page);
-  const sendButton = page.locator('#bot_save, button, input[type="submit"], a').filter({ hasText: /send|start|begin|save/i }).first();
-  if (await sendButton.count()) {
-    await sendButton.click({ timeout: 15_000 }).catch(() => {});
-    await page.waitForTimeout(2500);
+  const ready = await waitForDreamSendReady(page);
+  if (!ready) {
+    throw new Error('Dream is not ready to send letters yet. Check that the template saved and the sendout page shows Ready to begin sending.');
   }
+  const result = await triggerDreamLetterSend(page);
+  if (!result?.ok) throw new Error(result?.reason || 'Could not send letter on Dream');
+  await page.waitForTimeout(2000);
+  return result;
+}
+
+async function trySendOneDreamLetter(deps, profileId) {
+  const id = String(profileId || '');
+  if (!id || !deps.dreamSessions.has(id)) return false;
+
+  const db = deps.readDb();
+  const profile = db.profiles?.[id];
+  if (!profile || profile.active === false) return false;
+  const config = normalizeLetterBotConfig(profile.letterBot);
+  if (!config.enabled) return false;
+
+  let browserSession = deps.dreamBrowserSessions.get(id);
+  if (!browserSession?.page) {
+    const user = profileLetterBotUser(db, id, deps.currentAssignedUserForProfile);
+    if (!user) return false;
+    browserSession = await deps.startDreamBrowser(db, user, id, { force: false, headless: true, refreshDreamSession: false });
+  }
+
+  const page = browserSession.page;
+  await openLetterBotSendPage(page).catch(() => {});
+  await selectLetterBotOnlineFilter(page).catch(() => {});
+  const ready = await waitForDreamSendReady(page, 5000);
+  if (!ready) return false;
+
+  const result = await triggerDreamLetterSend(page);
+  if (!result?.ok) return false;
+
+  markLetterBotSendSuccess(profile, 1);
+  const dreamCount = await readDreamMenSentCount(page);
+  if (dreamCount != null) syncLetterBotMenSentFromDream(profile, dreamCount);
+  profile.updatedAt = new Date().toISOString();
+  deps.writeDb(db);
+  return true;
 }
 
 async function runLetterBotNow(deps, profileId, options = {}) {
@@ -338,10 +571,24 @@ async function runLetterBotNow(deps, profileId, options = {}) {
     }
     const page = browserSession.page;
     await page.goto('https://www.dream-singles.com/members/messaging/inbox', { waitUntil: 'domcontentloaded', timeout: 45_000 }).catch(() => {});
-    await runLetterBotOnPage(page, entry, mediaAbsolutePath);
+    await saveLetterBotTemplate(page, entry, mediaAbsolutePath);
+    markLetterBotTemplateRun(profile, true);
 
-    scheduleLetterBotNext(profile, true);
-    if (options.enable === true) profile.letterBot.enabled = true;
+    const templateOnly = options.templateOnly === true;
+    if (!templateOnly) {
+      await sendLetterBotOnDream(page);
+      markLetterBotSendSuccess(profile, 1);
+      const dreamCount = await readDreamMenSentCount(page);
+      if (dreamCount != null) syncLetterBotMenSentFromDream(profile, dreamCount);
+    }
+
+    if (options.enable === true) {
+      profile.letterBot.enabled = true;
+      startLetterBotSendLoop(deps, id);
+    } else if (normalizeLetterBotConfig(profile.letterBot).enabled) {
+      startLetterBotSendLoop(deps, id);
+    }
+
     profile.updatedAt = new Date().toISOString();
     deps.writeDb(db);
     return publicLetterBotConfig(profile, id, deps.letterBotMediaRoot);
@@ -373,11 +620,11 @@ async function maybeRunLetterBot(deps, profileId) {
   if (letterBotRunsInFlight.has(id)) return false;
   const now = Date.now();
   if (config.nextRunAt && new Date(config.nextRunAt).getTime() > now) return false;
-  if (!config.nextRunAt && config.lastSuccessAt) {
-    const last = new Date(config.lastSuccessAt).getTime();
+  if (!config.nextRunAt && config.lastTemplateAt) {
+    const last = new Date(config.lastTemplateAt).getTime();
     if (now - last < config.intervalMinutes * 60_000) return false;
   }
-  await runLetterBotNow(deps, id, {});
+  await runLetterBotNow(deps, id, { templateOnly: false });
   return true;
 }
 
@@ -512,6 +759,7 @@ function registerLetterBotRoutes(app, deps) {
       if (!pickLetterBotEntry(config)) return res.status(400).json({ ok: false, error: 'Add at least one letter text' });
       config.enabled = true;
       config.nextRunAt = new Date().toISOString();
+      resetLetterBotSessionCounters(config);
       profile.letterBot = config;
       profile.updatedAt = new Date().toISOString();
       writeDb(db);
@@ -531,6 +779,7 @@ function registerLetterBotRoutes(app, deps) {
       config.enabled = false;
       profile.letterBot = config;
       profile.updatedAt = new Date().toISOString();
+      stopLetterBotSendLoop(id);
       writeDb(db);
       res.json({ ok: true, letterbot: publicLetterBotConfig(profile, id, letterBotMediaRoot) });
     } catch (error) {
@@ -550,6 +799,7 @@ function registerLetterBotRoutes(app, deps) {
 }
 
 function startLetterBotScheduler(deps) {
+  restoreLetterBotSendLoops(deps);
   setInterval(() => {
     try {
       const db = deps.readDb();
@@ -571,5 +821,7 @@ export {
   registerLetterBotRoutes,
   startLetterBotScheduler,
   maybeRunLetterBot,
-  runLetterBotNow
+  runLetterBotNow,
+  stopLetterBotSendLoop,
+  restoreLetterBotSendLoops
 };
