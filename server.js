@@ -2411,6 +2411,16 @@ function dreamSessionStatus(profileId) {
   };
 }
 
+async function disconnectDreamProfileSession(profileId) {
+  const id = String(profileId || '');
+  if (!id) return;
+  dreamSessions.delete(id);
+  stopDreamHeartbeat(id);
+  try {
+    await stopDreamBrowser(id);
+  } catch {}
+}
+
 async function dreamHeartbeatTick(profileId) {
   const id = String(profileId || '');
   const session = dreamSessions.get(id);
@@ -4997,7 +5007,8 @@ function profilesForUser(db, user) {
       id: profile.id,
       name: profile.name || `Profile ${profile.id}`,
       photoUrl: profile.photoUrl || '',
-      googleDriveUrl: profile.googleDriveUrl || ''
+      googleDriveUrl: profile.googleDriveUrl || '',
+      hasCredentials: Boolean(profile.credentials?.login && profile.credentials?.password)
     }));
 }
 
@@ -5957,7 +5968,7 @@ app.post('/api/admin/profiles', requireAdmin, (req, res) => {
   res.json({ ok: true, profile: { id: profile.id, name: profile.name, photoUrl: profile.photoUrl || '' } });
 });
 
-app.patch('/api/admin/profiles/:id/assignment', requireAdmin, (req, res) => {
+app.patch('/api/admin/profiles/:id/assignment', requireAdmin, async (req, res) => {
   const db = readDb();
   const id = String(req.params.id);
   const profile = db.profiles[id];
@@ -6021,6 +6032,7 @@ app.patch('/api/admin/profiles/:id/assignment', requireAdmin, (req, res) => {
   updateProfileAssignmentHistory(db, id, nextWorkingOperatorId, req.user.id, new Date(), previousAssignee?.id || '');
 
   writeDb(db);
+  await disconnectDreamProfileSession(id);
   res.json({
     ok: true,
     profileId: id,
@@ -6029,7 +6041,7 @@ app.patch('/api/admin/profiles/:id/assignment', requireAdmin, (req, res) => {
   });
 });
 
-app.patch('/api/agencyos/profiles/:id/assignment', requireAdmin, (req, res) => {
+app.patch('/api/agencyos/profiles/:id/assignment', requireAdmin, async (req, res) => {
   const db = readDb();
   const id = String(req.params.id);
   const profile = db.profiles[id];
@@ -6090,6 +6102,7 @@ app.patch('/api/agencyos/profiles/:id/assignment', requireAdmin, (req, res) => {
   delete profile.archivedAt;
   profile.updatedAt = new Date().toISOString();
   writeDb(db);
+  await disconnectDreamProfileSession(id);
   res.json({
     ok: true,
     profileId: id,
@@ -6286,6 +6299,20 @@ app.post('/api/profiles/:id/launch', requireUser, async (req, res) => {
   res.json({ ok: true, token, profileId: id });
 });
 
+app.get('/api/profiles/connection-status', requireUser, (req, res) => {
+  const db = readDb();
+  const profiles = profilesForUser(db, req.user);
+  const statuses = {};
+  for (const profile of profiles) {
+    const stored = db.profiles[profile.id];
+    statuses[profile.id] = {
+      ...dreamSessionStatus(profile.id),
+      hasCredentials: Boolean(stored?.credentials?.login && stored?.credentials?.password)
+    };
+  }
+  res.json({ ok: true, statuses });
+});
+
 app.get('/api/profiles/:id/server-status', requireUser, (req, res) => {
   const db = readDb();
   const id = String(req.params.id);
@@ -6449,11 +6476,15 @@ app.put('/api/profiles/:id/server-heartbeat-config', requireUser, async (req, re
 });
 
 app.post('/api/profiles/:id/server-disconnect', requireUser, async (req, res) => {
+  const db = readDb();
   const id = String(req.params.id);
-  dreamSessions.delete(id);
-  stopDreamHeartbeat(id);
-  await stopDreamBrowser(id);
-  res.json({ ok: true, profileId: id, status: dreamSessionStatus(id) });
+  try {
+    requireProfileForUser(db, req.user, id);
+    await disconnectDreamProfileSession(id);
+    res.json({ ok: true, profileId: id, status: dreamSessionStatus(id) });
+  } catch (error) {
+    res.status(error.status || 500).json({ ok: false, error: error.message || 'Could not disconnect profile' });
+  }
 });
 
 app.post('/api/profiles/launch/redeem', (req, res) => {
@@ -6490,7 +6521,7 @@ app.post('/api/profiles/launch/redeem', (req, res) => {
   }
 });
 
-app.delete('/api/admin/profiles/:id', requireAdmin, (req, res) => {
+app.delete('/api/admin/profiles/:id', requireAdmin, async (req, res) => {
   const db = readDb();
   const id = String(req.params.id);
   const profile = db.profiles[id];
@@ -6508,6 +6539,7 @@ app.delete('/api/admin/profiles/:id', requireAdmin, (req, res) => {
   }
   updateProfileAssignmentHistory(db, id, '', req.user.id, archivedAt, previousAssignee?.id || '');
   writeDb(db);
+  await disconnectDreamProfileSession(id);
   res.json({ ok: true });
 });
 

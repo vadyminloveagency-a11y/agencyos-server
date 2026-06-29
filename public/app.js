@@ -10,6 +10,9 @@ let agencyProfiles = [];
 let agencyUsers = [];
 let pendingAgencyProfileChoicePanel = '';
 const profileConnectingIds = new Set();
+const profileServerConnectedById = new Map();
+let profileConnectionSyncTimer = null;
+let profileConnectionSyncInterval = null;
 const profilePendingCounts = new Map();
 const profilePendingLoadingIds = new Set();
 const profilePendingSoundKeys = new Map();
@@ -2166,9 +2169,108 @@ function updateLadyConnectionButton() {
   }
 }
 
+function isProfileMarkedConnected(profileId) {
+  return localStorage.getItem(`dream_team_lady_connected_${profileId}`) === '1';
+}
+
+function setProfileMarkedConnected(profileId, connected) {
+  const id = String(profileId || '');
+  if (!id) return;
+  if (connected) localStorage.setItem(`dream_team_lady_connected_${id}`, '1');
+  else localStorage.removeItem(`dream_team_lady_connected_${id}`);
+}
+
+function isProfileServerConnected(profileId) {
+  return profileServerConnectedById.get(String(profileId)) === true;
+}
+
+function profileHasCredentials(profile) {
+  return profile?.hasCredentials !== false;
+}
+
+function syncActiveLadyConnectedFromProfiles() {
+  if (!activeProfileId) {
+    ladyConnected = false;
+    return;
+  }
+  ladyConnected = isProfileMarkedConnected(activeProfileId) && isProfileServerConnected(activeProfileId);
+}
+
+function cleanStaleProfileConnectionFlags() {
+  const allowedIds = new Set(availableProfiles.map(profile => String(profile.id)));
+  for (const profile of availableProfiles) {
+    const id = String(profile.id);
+    if (isProfileMarkedConnected(id) && !isProfileServerConnected(id)) {
+      setProfileMarkedConnected(id, false);
+      profilePendingCounts.delete(id);
+      profilePendingSoundKeys.delete(id);
+    }
+  }
+  Object.keys(localStorage)
+    .filter(key => key.startsWith('dream_team_lady_connected_'))
+    .forEach(key => {
+      const id = key.replace('dream_team_lady_connected_', '');
+      if (!allowedIds.has(id)) localStorage.removeItem(key);
+    });
+  syncActiveLadyConnectedFromProfiles();
+}
+
+async function syncProfileConnectionStatuses() {
+  if (!currentUser || !availableProfiles.length) return;
+  try {
+    const response = await fetch('/api/profiles/connection-status');
+    if (!response.ok) return;
+    const result = await response.json();
+    const statuses = result.statuses || {};
+    for (const profile of availableProfiles) {
+      const id = String(profile.id);
+      const status = statuses[id];
+      if (!status) continue;
+      profile.hasCredentials = status.hasCredentials;
+      profileServerConnectedById.set(id, Boolean(status.connected));
+    }
+    cleanStaleProfileConnectionFlags();
+    renderSidebarProfileDock();
+    updateLadyConnectionButton();
+    syncAgencyProfilePowerToggle();
+    syncAgencyInboxAccess();
+    syncAgencyFavoritesAccess();
+    syncAgencyNavLocks();
+  } catch (error) {
+    console.warn('Could not sync profile connection statuses', error);
+  }
+}
+
+function scheduleProfileConnectionSync(delay = 0) {
+  if (profileConnectionSyncTimer) clearTimeout(profileConnectionSyncTimer);
+  profileConnectionSyncTimer = window.setTimeout(() => {
+    profileConnectionSyncTimer = null;
+    syncProfileConnectionStatuses();
+  }, Math.max(0, Number(delay) || 0));
+}
+
+function startProfileConnectionSyncLoop() {
+  if (profileConnectionSyncInterval) return;
+  profileConnectionSyncInterval = window.setInterval(() => {
+    if (!currentUser || document.hidden) return;
+    syncProfileConnectionStatuses();
+  }, 45000);
+}
+
+function stopProfileConnectionSyncLoop() {
+  if (profileConnectionSyncInterval) {
+    clearInterval(profileConnectionSyncInterval);
+    profileConnectionSyncInterval = null;
+  }
+  if (profileConnectionSyncTimer) {
+    clearTimeout(profileConnectionSyncTimer);
+    profileConnectionSyncTimer = null;
+  }
+}
+
 function connectedProfileIds() {
   return availableProfiles
-    .filter(profile => localStorage.getItem(`dream_team_lady_connected_${profile.id}`) === '1')
+    .filter(profile => isProfileMarkedConnected(profile.id) && isProfileServerConnected(profile.id))
     .map(profile => String(profile.id));
 }
 
@@ -2317,22 +2419,43 @@ function renderSidebarProfileDock() {
     </div>
     <div class="sidebar-profile-dock-list">
       ${availableProfiles.map(profile => {
-        const connected = localStorage.getItem(`dream_team_lady_connected_${profile.id}`) === '1';
+        const hasCredentials = profileHasCredentials(profile);
+        const markedConnected = isProfileMarkedConnected(profile.id);
+        const serverConnected = isProfileServerConnected(profile.id);
+        const connected = markedConnected && serverConnected;
+        const staleLocal = markedConnected && !serverConnected;
         const connecting = profileConnectingIds.has(String(profile.id));
         const active = String(profile.id) === String(activeProfileId);
         const name = profile.name && profile.name !== `Profile ${profile.id}` ? profile.name : profile.id;
         const initial = String(name || profile.id || '?').slice(0, 1).toUpperCase();
-        const statusText = connecting ? 'Logging in' : connected ? 'Online' : 'Click to login';
+        const statusText = connecting
+          ? 'Logging in'
+          : !hasCredentials
+            ? 'No credentials'
+            : staleLocal
+              ? 'Reconnect needed'
+              : connected
+                ? 'Online'
+                : 'Click to login';
+        const powerTitle = connecting
+          ? 'Connecting...'
+          : !hasCredentials
+            ? 'Administrator must add Dream credentials first'
+            : connected
+              ? 'Disconnect from Dream. Dashboard balance is kept.'
+              : staleLocal
+                ? 'Reconnect profile to Dream'
+                : 'Connect profile to Dream';
         const pending = profilePendingCounts.get(String(profile.id)) || {};
         const noReplyCount = connected && !connecting ? Math.max(0, Number(pending.noReplyCount || 0) || 0) : 0;
         return `
-          <div class="sidebar-profile-dock-item ${active ? 'active' : ''} ${connected ? 'online' : ''} ${connecting ? 'connecting' : ''} ${active && connected ? 'active-online' : ''}" data-profile-id="${escapeAttr(profile.id)}" title="${escapeAttr(name)} - ${escapeAttr(profile.id)}">
+          <div class="sidebar-profile-dock-item ${active ? 'active' : ''} ${connected ? 'online' : ''} ${connecting ? 'connecting' : ''} ${active && connected ? 'active-online' : ''} ${!hasCredentials ? 'no-credentials' : ''} ${staleLocal ? 'stale-connection' : ''}" data-profile-id="${escapeAttr(profile.id)}" title="${escapeAttr(name)} - ${escapeAttr(profile.id)}">
             <span class="sidebar-profile-dock-avatar-wrap">
               <span class="sidebar-profile-dock-avatar ${profile.photoUrl ? '' : 'no-photo'}">${profile.photoUrl ? `<img src="${escapeAttr(profile.photoUrl)}" alt="">` : escapeHtml(initial)}</span>
               ${noReplyCount ? `<span class="sidebar-profile-pending-badge">+${escapeHtml(noReplyCount)}</span>` : ''}
             </span>
             <span class="sidebar-profile-dock-copy"><strong>${escapeHtml(name)}</strong><small>${escapeHtml(statusText)}${connecting ? '<i class="login-dots"><b></b><b></b><b></b></i>' : ''}</small></span>
-            <button class="sidebar-profile-power ${connected ? 'logout' : 'login'}" type="button" data-profile-power-id="${escapeAttr(profile.id)}" title="${connected ? 'Disconnect from Dream. Dashboard balance is kept.' : 'Connect profile to Dream'}" ${connecting ? 'disabled' : ''}>${connecting ? '...' : connected ? 'Off' : 'On'}</button>
+            <button class="sidebar-profile-power ${connected ? 'logout' : 'login'}" type="button" data-profile-power-id="${escapeAttr(profile.id)}" title="${escapeAttr(powerTitle)}" ${connecting || !hasCredentials ? 'disabled' : ''}>${connecting ? '...' : connected ? 'Off' : 'On'}</button>
           </div>`;
       }).join('')}
     </div>
@@ -2346,10 +2469,9 @@ function isProfileWorkView(view) {
 }
 
 function isActiveProfileOnline() {
-  return Boolean(activeProfileId) && (
-    ladyConnected ||
-    localStorage.getItem(`dream_team_lady_connected_${activeProfileId}`) === '1'
-  );
+  return Boolean(activeProfileId)
+    && isProfileMarkedConnected(activeProfileId)
+    && isProfileServerConnected(activeProfileId);
 }
 
 function syncAgencyNavLocks() {
@@ -2378,6 +2500,9 @@ async function connectProfileById(profileId, options = {}) {
   const id = String(profileId || '');
   const profile = availableProfiles.find(item => String(item.id) === id);
   if (!profile) throw new Error('Profile is not assigned to you');
+  if (!profileHasCredentials(profile)) {
+    throw new Error('Dream credentials are not configured for this profile. Ask your administrator.');
+  }
   if (profileConnectingIds.has(id)) return null;
   profileConnectingIds.add(id);
   renderSidebarProfileDock();
@@ -2386,7 +2511,9 @@ async function connectProfileById(profileId, options = {}) {
       body: { syncInbox: options.syncInbox !== false, maxPages: options.maxPages || 3 }
     });
     await prepareLocalDreamProfile(id);
-    localStorage.setItem(`dream_team_lady_connected_${id}`, '1');
+    profileServerConnectedById.set(id, true);
+    setProfileMarkedConnected(id, true);
+    syncActiveLadyConnectedFromProfiles();
     const noReplyCount = agencyPendingLetterCount(result?.letters || []);
     setAgencyProfilePendingCount(id, noReplyCount, { playSound: options.playSound !== false });
     loadProfilePendingCount(id, {
@@ -2398,6 +2525,10 @@ async function connectProfileById(profileId, options = {}) {
   } finally {
     profileConnectingIds.delete(id);
     renderSidebarProfileDock();
+    updateLadyConnectionButton();
+    syncAgencyProfilePowerToggle();
+    syncAgencyInboxAccess();
+    syncAgencyFavoritesAccess();
   }
 }
 
@@ -2425,7 +2556,7 @@ async function switchWorkingProfile(profileId, options = {}) {
     activeProfileId = id;
     localStorage.setItem('dream_crm_profile_id', id);
     if (profileSelect) profileSelect.value = id;
-    ladyConnected = localStorage.getItem(`dream_team_lady_connected_${id}`) === '1';
+    syncActiveLadyConnectedFromProfiles();
     renderProfileSwitcher(profile);
     updateLadyConnectionButton();
     renderSidebarProfileDock();
@@ -2456,15 +2587,16 @@ async function switchWorkingProfile(profileId, options = {}) {
 
 async function connectAllProfiles() {
   const previousProfileId = activeProfileId;
+  const connectableProfiles = availableProfiles.filter(profile => profileHasCredentials(profile));
   const results = await Promise.allSettled(
-    availableProfiles.map(profile =>
+    connectableProfiles.map(profile =>
       connectProfileById(profile.id, { syncInbox: false, maxPages: 1 })
         .then(() => ({ profile }))
     )
   );
   const errors = results
     .map((result, index) => result.status === 'rejected'
-      ? `${availableProfiles[index]?.name || availableProfiles[index]?.id}: ${result.reason?.message || result.reason}`
+      ? `${connectableProfiles[index]?.name || connectableProfiles[index]?.id}: ${result.reason?.message || result.reason}`
       : '')
     .filter(Boolean);
   renderSidebarProfileDock();
@@ -2491,7 +2623,8 @@ async function disconnectProfileById(profileId, reason = 'sidebar-profile-power'
       const message = String(error?.message || '');
       if (!/logout was not confirmed/i.test(message)) throw error;
     });
-    localStorage.removeItem(`dream_team_lady_connected_${id}`);
+    profileServerConnectedById.set(id, false);
+    setProfileMarkedConnected(id, false);
     profilePendingCounts.delete(id);
     profilePendingSoundKeys.delete(id);
     if (String(activeProfileId) === id) {
@@ -2514,9 +2647,8 @@ function syncAgencyProfilePowerToggle() {
   agencyProfilePowerToggle = ensureAgencyProfilePowerToggle();
   syncAgencyShellWorkingLady();
   if (!agencyProfilePowerToggle) return;
-  const storedConnected = Boolean(activeProfileId) && localStorage.getItem(`dream_team_lady_connected_${activeProfileId}`) === '1';
-  if (storedConnected && !ladyConnected) ladyConnected = true;
-  const visible = Boolean(currentUser && activeProfileId && (ladyConnected || storedConnected) && document.body.classList.contains('mandarin-home-active'));
+  syncActiveLadyConnectedFromProfiles();
+  const visible = Boolean(currentUser && activeProfileId && isActiveProfileOnline() && document.body.classList.contains('mandarin-home-active'));
   agencyProfilePowerToggle.classList.toggle('hidden', !visible);
   agencyProfilePowerToggle.classList.toggle('is-online', visible);
   agencyProfilePowerToggle.disabled = ladyDisconnectInProgress;
@@ -7231,7 +7363,7 @@ function resetAgencyDashboardDateToToday() {
 
 function syncAgencyInboxAccess() {
   const roleAllowed = ['admin', 'operator'].includes(currentUser?.role);
-  const allowed = roleAllowed && ladyConnected;
+  const allowed = roleAllowed && isActiveProfileOnline();
   const panel = agencyInboxFrame?.closest('[data-agency-panel="inbox"]');
   if (agencyInboxNoAccess) {
     const title = agencyInboxNoAccess.querySelector('strong');
@@ -7246,13 +7378,13 @@ function syncAgencyInboxAccess() {
   panel?.classList.toggle('is-locked', !allowed);
   agencyInboxNoAccess?.classList.toggle('hidden', allowed);
   agencyInboxFrame?.classList.toggle('hidden', !allowed);
-  agencyInboxAuthorizeBtn?.classList.toggle('hidden', !roleAllowed || ladyConnected);
+  agencyInboxAuthorizeBtn?.classList.toggle('hidden', !roleAllowed || isActiveProfileOnline());
   return allowed;
 }
 
 function syncAgencyFavoritesAccess() {
   const roleAllowed = ['admin', 'operator'].includes(currentUser?.role);
-  const allowed = roleAllowed && ladyConnected;
+  const allowed = roleAllowed && isActiveProfileOnline();
   const panel = agencyFavoritesContent?.closest('[data-agency-panel="favorites"]');
   if (agencyFavoritesNoAccess) {
     const title = agencyFavoritesNoAccess.querySelector('strong');
@@ -7267,7 +7399,7 @@ function syncAgencyFavoritesAccess() {
   panel?.classList.toggle('is-locked', !allowed);
   agencyFavoritesNoAccess?.classList.toggle('hidden', allowed);
   agencyFavoritesContent?.classList.toggle('hidden', !allowed);
-  agencyFavoritesAuthorizeBtn?.classList.toggle('hidden', !roleAllowed || ladyConnected);
+  agencyFavoritesAuthorizeBtn?.classList.toggle('hidden', !roleAllowed || isActiveProfileOnline());
   return allowed;
 }
 
@@ -8562,6 +8694,8 @@ function applySession(result, forceProfileChoice = false, options = {}) {
   setupMyStatsDefaults();
   accessScreen.classList.add('hidden');
   showMandarinHome({ resetPanel: options.resetPanel !== false });
+  scheduleProfileConnectionSync(500);
+  startProfileConnectionSyncLoop();
   return;
   if (currentUser.role === 'director') {
     activeProfileId = '';
@@ -8995,9 +9129,19 @@ async function logout() {
 }
 
 async function signOutCrmAccount() {
+  stopProfileConnectionSyncLoop();
   if (profileChoiceLogout) profileChoiceLogout.disabled = true;
   try {
-    if (activeProfileId) await serverProfileRequest('server-disconnect', { body: {} }).catch(() => {});
+    for (const profile of availableProfiles) {
+      const id = String(profile.id);
+      if (!isProfileMarkedConnected(id) && !isProfileServerConnected(id)) continue;
+      if (window.agencyElectron?.logoutDreamProfile) {
+        await window.agencyElectron.logoutDreamProfile(id).catch(() => {});
+      }
+      await serverProfileRequestFor(id, 'server-disconnect', { body: {} }).catch(() => {});
+      profileServerConnectedById.set(id, false);
+      setProfileMarkedConnected(id, false);
+    }
     await fetch('/api/auth/logout', { method: 'POST' });
     currentUser = null;
     availableProfiles = [];
@@ -9005,6 +9149,7 @@ async function signOutCrmAccount() {
     managedUsers = [];
     activeProfileId = '';
     ladyConnected = false;
+    profileServerConnectedById.clear();
     allMen = [];
     chatFavoriteMen = [];
     localStorage.removeItem('dream_crm_profile_id');
@@ -10052,6 +10197,7 @@ async function refreshSessionQuietly() {
         : currentUser?.role === 'mentor' ? 'Mentor'
           : 'Operator';
   }
+  scheduleProfileConnectionSync(300);
   return true;
 }
 

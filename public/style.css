@@ -27979,6 +27979,18 @@ body.mandarin-home-active .agency-shell-sidebar #sidebarProfileDock + .agency-sh
   color: #86efac;
 }
 
+.sidebar-profile-dock-item.stale-connection .sidebar-profile-dock-copy small {
+  color: #d97706;
+}
+
+.sidebar-profile-dock-item.no-credentials .sidebar-profile-dock-copy small {
+  color: #94a3b8;
+}
+
+.sidebar-profile-dock-item.no-credentials {
+  opacity: 0.72;
+}
+
 body.agency-shell-collapsed .sidebar-profile-dock-head,
 body.agency-shell-collapsed .sidebar-profile-dock-copy {
   display: none;
