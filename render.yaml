@@ -3,10 +3,12 @@ services:
     name: dream-team-crm
     env: node
     plan: starter
-    buildCommand: npm ci && npx playwright install chromium
+    buildCommand: npm ci
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: "0"
       - key: NODE_ENV
         value: production
       - key: DREAM_TEAM_DATA_DIR

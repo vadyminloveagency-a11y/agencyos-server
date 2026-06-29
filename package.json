@@ -14,7 +14,7 @@
   "scripts": {
     "start": "node server.js",
     "check": "node --check server.js && node --check scripts/export-runtime-data.mjs",
-    "postinstall": "playwright install chromium"
+    "postinstall": "node scripts/install-playwright-browser.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",
