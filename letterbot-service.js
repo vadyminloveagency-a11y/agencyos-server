@@ -2,7 +2,9 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
-const DREAM_LETTER_BOT_URL = 'https://www.dream-singles.com/members/messaging/bot/';
+const DREAM_LETTER_BOT_URL = 'https://www.dream-singles.com/members/messaging/bot/send';
+const DREAM_LETTER_BOT_FALLBACK_URL = 'https://www.dream-singles.com/members/messaging/bot/';
+const LETTERBOT_DEFAULT_AUDIENCE = 'online';
 const LETTERBOT_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const LETTERBOT_MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const letterBotRunsInFlight = new Map();
@@ -11,6 +13,7 @@ function defaultLetterBotConfig() {
   return {
     enabled: false,
     intervalMinutes: 20,
+    audienceFilter: LETTERBOT_DEFAULT_AUDIENCE,
     queueIndex: 0,
     lastRunAt: '',
     lastSuccessAt: '',
@@ -37,6 +40,7 @@ function normalizeLetterBotConfig(raw) {
     ...base,
     enabled: raw.enabled === true,
     intervalMinutes: Math.min(240, Math.max(5, Number(raw.intervalMinutes) || 20)),
+    audienceFilter: String(raw.audienceFilter || LETTERBOT_DEFAULT_AUDIENCE),
     queueIndex: Math.max(0, Number(raw.queueIndex) || 0),
     lastRunAt: String(raw.lastRunAt || ''),
     lastSuccessAt: String(raw.lastSuccessAt || ''),
@@ -83,6 +87,8 @@ function publicLetterBotConfig(profile, profileId, mediaRoot) {
   return {
     enabled: config.enabled,
     intervalMinutes: config.intervalMinutes,
+    audienceFilter: config.audienceFilter || LETTERBOT_DEFAULT_AUDIENCE,
+    audienceLabel: 'Online gentlemen (exclude Favorites, Contacts)',
     queueIndex: config.queueIndex,
     lastRunAt: config.lastRunAt,
     lastSuccessAt: config.lastSuccessAt,
@@ -168,8 +174,72 @@ function profileLetterBotUser(db, profileId, currentAssignedUserForProfile) {
   return Object.values(db.users || {}).find(user => (user.profileIds || []).includes(profileId)) || null;
 }
 
+async function openLetterBotPage(page) {
+  for (const url of [DREAM_LETTER_BOT_URL, DREAM_LETTER_BOT_FALLBACK_URL]) {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    const hasEditor = await page.locator('.cke_wysiwyg_frame').count();
+    const hasFilters = await page.locator('input[type="radio"]').count();
+    if (hasEditor || hasFilters) return url;
+  }
+  throw new Error('Letter Sendout page did not load');
+}
+
+async function selectLetterBotOnlineFilter(page) {
+  const label = page.locator('label').filter({ hasText: /Send Gentlemen Online/i }).first();
+  if (await label.count()) {
+    await label.click({ timeout: 10_000 });
+    await page.waitForTimeout(500);
+    return;
+  }
+
+  const radio = page.getByRole('radio', { name: /Gentlemen Online/i }).first();
+  if (await radio.count()) {
+    await radio.check({ timeout: 10_000 });
+    await page.waitForTimeout(500);
+    return;
+  }
+
+  const selected = await page.evaluate(() => {
+    const clickRadio = input => {
+      if (!input) return false;
+      input.scrollIntoView({ block: 'center' });
+      input.click();
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      return input.checked;
+    };
+
+    const labels = [...document.querySelectorAll('label')];
+    const onlineLabel = labels.find(node => /send gentlemen online/i.test(node.textContent || ''));
+    if (onlineLabel) {
+      onlineLabel.click();
+      const nested = onlineLabel.querySelector('input[type="radio"]');
+      if (clickRadio(nested)) return true;
+      const linked = document.getElementById(onlineLabel.getAttribute('for') || '');
+      if (clickRadio(linked)) return true;
+    }
+
+    const radios = [...document.querySelectorAll('input[type="radio"]')];
+    const onlineRadio = radios.find(input => {
+      const bits = [
+        input.id,
+        input.name,
+        input.value,
+        input.getAttribute('aria-label'),
+        input.closest('label')?.textContent
+      ].join(' ');
+      return /gentlemen online|online only|^online$/i.test(bits);
+    });
+    if (clickRadio(onlineRadio)) return true;
+    return clickRadio(radios[0]);
+  });
+
+  if (!selected) throw new Error('Could not select Online filter on Letter Sendout page');
+  await page.waitForTimeout(500);
+}
+
 async function runLetterBotOnPage(page, entry, mediaAbsolutePath) {
-  await page.goto(DREAM_LETTER_BOT_URL, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  await openLetterBotPage(page);
+  await selectLetterBotOnlineFilter(page);
   await page.waitForSelector('.cke_wysiwyg_frame', { timeout: 45_000 });
   const editor = page.frameLocator('.cke_wysiwyg_frame.cke_reset').first();
   await editor.locator('body').click({ timeout: 10_000 }).catch(() => {});
