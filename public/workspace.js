@@ -135,6 +135,7 @@ let workspaceMediaLastStats = [];
 let workspaceProfileSyncRunning = false;
 const workspaceActiveSyncProfileIds = new Set();
 const workspaceActiveSyncControllers = new Map();
+const workspaceAttachmentOpenKeys = new Set();
 const MAX_REPLY_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 const WORKSPACE_MEDIA_PAGE_SIZE = 20;
 const WORKSPACE_MEDIA_SECTIONS = {
@@ -3247,6 +3248,10 @@ async function openWorkspaceMessageHistory(triggerButton = null) {
   await loadWorkspaceHistoryIntoPanel(group, { force: true, button: triggerButton || historyBtn });
 }
 
+function workspaceAttachmentKey(letter = {}) {
+  return String(letter?.key || letter?.messageLink || letter?.id || '').trim();
+}
+
 function renderAttachments(attachments = [], letter = {}) {
   const cleanAttachments = (Array.isArray(attachments) ? attachments : [])
     .map(item => ({
@@ -3275,8 +3280,10 @@ function renderAttachments(attachments = [], letter = {}) {
     </svg>
   `;
   const loadingDots = '<span class="workspace-attachment-loading-dots" aria-label="Loading"><i></i><i></i><i></i></span>';
+  const attachmentKey = workspaceAttachmentKey(letter);
+  const attachmentOpen = attachmentKey && workspaceAttachmentOpenKeys.has(attachmentKey);
   return `
-    <details class="workspace-attachments" open>
+    <details class="workspace-attachments"${attachmentOpen ? ' open' : ''}${attachmentKey ? ` data-attachment-key="${escapeAttr(attachmentKey)}"` : ''}>
       <summary title="Show or hide files" aria-label="Show or hide files">
         ${eyeIcon}
       </summary>
@@ -4541,6 +4548,10 @@ async function toggleWorkspaceFavorite(id) {
 async function checkCurrentManActivity(button) {
   const group = findGroup(workspaceSelectedId);
   if (!group?.id) return;
+  if (!activeProfileId || !isWorkspaceLadyConnected()) {
+    alert('Connect this profile first (On), then try Check Activity again.');
+    return;
+  }
   const oldText = button?.textContent || '';
   if (button) {
     button.disabled = true;
@@ -4556,10 +4567,12 @@ async function checkCurrentManActivity(button) {
         name: group.name || '',
         profileUrl: group.profileLink || `https://www.dream-singles.com/${group.id}.html`
       })
-    });
+    }, 90000);
     const presence = result.presence || {};
     const onlineNow = presence.onlineNow === true;
-    const lastActivityText = onlineNow ? 'Online now' : String(presence.lastActivityText || '').trim();
+    const lastActivityText = onlineNow
+      ? 'Online now'
+      : (String(presence.lastActivityText || '').trim() || 'Activity unknown');
     workspaceLetters = workspaceLetters.map(letter => String(letter?.id || '') === String(group.id)
       ? {
           ...letter,
@@ -4568,11 +4581,16 @@ async function checkCurrentManActivity(button) {
           onlineCheckedAt: presence.onlineCheckedAt || new Date().toISOString()
         }
       : letter);
-    await reloadWorkspaceInbox();
-    renderCurrentWorkspaceState();
+    const updatedGroup = findGroup(workspaceSelectedId);
+    if (updatedGroup) {
+      updatedGroup.onlineNow = onlineNow;
+      updatedGroup.lastActivityText = lastActivityText;
+      updatedGroup.onlineCheckedAt = presence.onlineCheckedAt || new Date().toISOString();
+      renderHeaderDialog(updatedGroup);
+      renderList();
+    }
   } catch (error) {
-    renderCurrentWorkspaceState();
-    alert(error.message || 'Could not check activity');
+    alert(error.message || 'Could not check activity. Reconnect the profile and try again.');
   } finally {
     if (button) {
       button.disabled = false;
@@ -4744,8 +4762,14 @@ dialog.addEventListener('click', event => {
 
 dialog.addEventListener('toggle', event => {
   const details = event.target;
-  if (!(details instanceof HTMLDetailsElement) || !details.matches('.workspace-attachments') || !details.open) return;
-  loadOpenWorkspaceAttachments(details);
+  if (!(details instanceof HTMLDetailsElement) || !details.matches('.workspace-attachments')) return;
+  const key = String(details.dataset.attachmentKey || '').trim();
+  if (details.open) {
+    if (key) workspaceAttachmentOpenKeys.add(key);
+    loadOpenWorkspaceAttachments(details);
+    return;
+  }
+  if (key) workspaceAttachmentOpenKeys.delete(key);
 }, true);
 
 function loadOpenWorkspaceAttachments(root = dialog) {
