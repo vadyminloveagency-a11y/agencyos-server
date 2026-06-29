@@ -2332,7 +2332,7 @@ function renderSidebarProfileDock() {
               ${noReplyCount ? `<span class="sidebar-profile-pending-badge">+${escapeHtml(noReplyCount)}</span>` : ''}
             </span>
             <span class="sidebar-profile-dock-copy"><strong>${escapeHtml(name)}</strong><small>${escapeHtml(statusText)}${connecting ? '<i class="login-dots"><b></b><b></b><b></b></i>' : ''}</small></span>
-            <button class="sidebar-profile-power ${connected ? 'logout' : 'login'}" type="button" data-profile-power-id="${escapeAttr(profile.id)}" ${connecting ? 'disabled' : ''}>${connecting ? '...' : connected ? 'Off' : 'On'}</button>
+            <button class="sidebar-profile-power ${connected ? 'logout' : 'login'}" type="button" data-profile-power-id="${escapeAttr(profile.id)}" title="${connected ? 'Disconnect from Dream. Dashboard balance is kept.' : 'Connect profile to Dream'}" ${connecting ? 'disabled' : ''}>${connecting ? '...' : connected ? 'Off' : 'On'}</button>
           </div>`;
       }).join('')}
     </div>
@@ -8035,6 +8035,34 @@ function scheduleAgencyDashboardAutoBalance(delay = 2500) {
   }, delay);
 }
 
+function setAgencyDashboardStatusMessage(message = '', tone = 'info') {
+  if (!agencyDashboardStatus) return;
+  const text = String(message || '').trim();
+  agencyDashboardStatus.textContent = text;
+  agencyDashboardStatus.classList.remove('is-error', 'is-warning', 'is-ok');
+  if (!text) return;
+  if (tone === 'error') agencyDashboardStatus.classList.add('is-error');
+  else if (tone === 'warning') agencyDashboardStatus.classList.add('is-warning');
+  else if (tone === 'ok') agencyDashboardStatus.classList.add('is-ok');
+}
+
+function formatAgencyDashboardSyncMeta(meta = {}) {
+  if (!meta || typeof meta !== 'object') return '';
+  const lastSyncedAt = String(meta.lastSyncedAt || '').trim();
+  const lastLabel = lastSyncedAt ? formatAgencyDate(lastSyncedAt) : '';
+  if (meta.stale) {
+    if (lastLabel) {
+      const missing = Number(meta.missingPastDays || 0);
+      return missing > 0
+        ? `Balance may be outdated. Last sync: ${lastLabel}. ${missing} day(s) not synced yet.`
+        : `Balance may be outdated. Last sync: ${lastLabel}.`;
+    }
+    if (meta.hasLedgerRows) return 'Balance not fully synced for this month. Press Start Balance or wait for auto-sync.';
+    return 'Balance not synced yet. Press Start Balance or wait for auto-sync.';
+  }
+  return lastLabel ? `Balance updated: ${lastLabel}` : '';
+}
+
 function setupAgencyDashboardBonusDates() {
   if (agencyDashboardBonusDateInitialized) return;
   const today = todayDateInputValue();
@@ -8194,7 +8222,7 @@ async function loadAgencyDashboardOperators(options = {}) {
   agencyDashboardCalendar?.classList.add('hidden');
   agencyDashboardStartBalanceBtn?.classList.add('primary');
   agencyDashboardBonusesBtn?.classList.remove('primary');
-  if (agencyDashboardStatus) agencyDashboardStatus.textContent = 'Loading dashboard...';
+  setAgencyDashboardStatusMessage('Loading dashboard...');
   try {
     const params = new URLSearchParams({
       year: String(agencyDashboardYearValue()),
@@ -8205,11 +8233,12 @@ async function loadAgencyDashboardOperators(options = {}) {
     if (!response.ok) throw new Error(result.error || 'Could not load dashboard');
     agencyDashboardRowsData = Array.isArray(result.rows) ? result.rows : [];
     renderAgencyDashboardRows();
-    if (agencyDashboardStatus) agencyDashboardStatus.textContent = '';
+    const metaText = formatAgencyDashboardSyncMeta(result.balanceMeta);
+    setAgencyDashboardStatusMessage(metaText, result.balanceMeta?.stale ? 'warning' : (metaText ? 'ok' : 'info'));
   } catch (error) {
     agencyDashboardRowsData = [];
     renderAgencyDashboardRows();
-    if (agencyDashboardStatus) agencyDashboardStatus.textContent = error.message || 'Could not load dashboard';
+    setAgencyDashboardStatusMessage(error.message || 'Could not load dashboard', 'error');
   } finally {
     if (!options.skipAutoBalance) scheduleAgencyDashboardAutoBalance();
   }
@@ -8289,6 +8318,9 @@ async function startAgencyDashboardBalanceRefresh(options = {}) {
       ? 'Syncing actual balance...'
       : `Refreshing balance for ${formatSalaryPeriodValue(targetDate)}...`;
   }
+  setAgencyDashboardStatusMessage(
+    isAuto ? 'Syncing actual balance...' : `Refreshing balance for ${formatSalaryPeriodValue(targetDate)}...`
+  );
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 65000);
   try {
@@ -8317,9 +8349,24 @@ async function startAgencyDashboardBalanceRefresh(options = {}) {
       const skippedDays = Array.isArray(result.skipped) ? result.skipped : [];
       const refreshed = refreshedDays.length;
       const remaining = Number(result.remainingMissing || 0);
-      agencyDashboardStatus.textContent = refreshed
-        ? `Balance synced: ${refreshed} day(s) loaded${remaining ? `, ${remaining} missing left` : ''}.`
-        : `Balance already actual for ${formatSalaryPeriodValue(skippedDays[0] || targetDate)}.`;
+      const agencyError = String(result.agencyError || '').trim();
+      if (agencyError) {
+        setAgencyDashboardStatusMessage(
+          `Agency sync failed: ${agencyError}. Check Agency login in settings.`,
+          'error'
+        );
+      } else if (refreshed) {
+        setAgencyDashboardStatusMessage(
+          `Balance synced: ${refreshed} day(s) loaded${remaining ? `, ${remaining} missing left` : ''}.`,
+          remaining ? 'warning' : 'ok'
+        );
+      } else {
+        setAgencyDashboardStatusMessage(
+          formatAgencyDashboardSyncMeta(result.balanceMeta) ||
+            `Balance already actual for ${formatSalaryPeriodValue(skippedDays[0] || targetDate)}.`,
+          result.balanceMeta?.stale ? 'warning' : 'ok'
+        );
+      }
     }
     const remaining = Number(result.remainingMissing || 0);
     if (isAuto && remaining > 0 && isAgencyDashboardTotalVisible()) {
@@ -8328,11 +8375,12 @@ async function startAgencyDashboardBalanceRefresh(options = {}) {
       scheduleAgencyDashboardAutoBalance(15 * 60 * 1000);
     }
   } catch (error) {
-    if (agencyDashboardStatus) {
-      agencyDashboardStatus.textContent = error?.name === 'AbortError'
+    setAgencyDashboardStatusMessage(
+      error?.name === 'AbortError'
         ? 'Dream did not answer in time. Try again later.'
-        : (error.message || 'Could not refresh balances');
-    }
+        : (error.message || 'Could not refresh balances'),
+      'error'
+    );
     if (isAgencyDashboardTotalVisible()) scheduleAgencyDashboardAutoBalance(60 * 1000);
   } finally {
     clearTimeout(timeout);

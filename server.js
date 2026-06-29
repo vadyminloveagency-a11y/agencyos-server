@@ -290,6 +290,13 @@ function dbFileMtimeMs() {
 function readFileDb() {
   if (!fs.existsSync(DB_PATH)) return { db: emptyDb(), mtimeMs: 0 };
   const db = normalizeDb(JSON.parse(fs.readFileSync(DB_PATH, 'utf8')));
+  if (backfillAssignmentHistory(db)) {
+    try {
+      writeDbSync(db);
+    } catch (error) {
+      console.warn('Could not persist assignment history backfill', error);
+    }
+  }
   return { db, mtimeMs: dbFileMtimeMs() };
 }
 
@@ -1380,6 +1387,73 @@ function rowVisibleForUserAssignment(db, user, row) {
   return isProfileAssignedToUserAt(db, user, profileId, rowDate);
 }
 
+function ledgerRowOperatorId(db, row) {
+  const profileId = String(row?.profileId || profileIdFromAgencyTarget(row?.to) || '').trim();
+  if (!profileId) return String(row?.assignedOperatorId || '');
+  const rowDate = parseAgencyRowDate(row?.date);
+  const summaryDate = row?.summaryTo
+    ? new Date(dreamBusinessDayBounds(String(row.summaryTo).slice(0, 10)).end.getTime() - 1)
+    : null;
+  const assigned = assignedUserForProfileAt(db, profileId, rowDate || summaryDate || new Date());
+  return String(assigned?.id || row?.assignedOperatorId || '');
+}
+
+function ledgerRowMatchesOperatorFilter(db, row, operatorFilter) {
+  if (!operatorFilter) return true;
+  return ledgerRowOperatorId(db, row) === String(operatorFilter);
+}
+
+function backfillAssignmentHistory(db) {
+  let changed = false;
+  db.assignmentHistory ||= {};
+  const now = new Date().toISOString();
+  for (const user of Object.values(db.users || {})) {
+    if (!['operator', 'admin'].includes(user.role) || user.active === false) continue;
+    const userId = String(user.id || '');
+    if (!userId) continue;
+    for (const profileId of user.profileIds || []) {
+      const id = String(profileId || '').trim();
+      if (!id || db.profiles?.[id]?.active === false) continue;
+      const history = Array.isArray(db.assignmentHistory[id]) ? db.assignmentHistory[id] : [];
+      if (history.length > 0) continue;
+      const from = db.profiles[id]?.createdAt || user.createdAt || '1970-01-01T00:00:00.000Z';
+      db.assignmentHistory[id] = [{
+        profileId: id,
+        operatorId: userId,
+        from,
+        to: '',
+        assignedBy: 'system-backfill',
+        createdAt: now,
+        backfilled: true
+      }];
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function dashboardBalanceSyncMeta(db, requester, monthRange) {
+  const requesterKey = String(requester?.id || '');
+  const marks = db.agencyDashboardBalanceRefreshes?.[requesterKey] || {};
+  const today = dreamBusinessDateKey(new Date());
+  const monthDays = dateKeysInRange(monthRange.from, monthRange.to).filter(day => day <= today);
+  const syncedDays = monthDays.filter(day => marks[day]);
+  const syncedAtValues = syncedDays.map(day => marks[day]).filter(Boolean).sort();
+  const lastSyncedAt = syncedAtValues.at(-1) || '';
+  const missingPastDays = monthDays.filter(day => day < today && !marks[day]).length;
+  const todayInMonth = today >= monthRange.from && today <= monthRange.to;
+  const stale = missingPastDays > 0 || (todayInMonth && !marks[today]);
+  const ledgerCount = Object.keys(db.agencyBonusLedger || {}).length;
+  return {
+    lastSyncedAt,
+    syncedDayCount: syncedDays.length,
+    totalDays: monthDays.length,
+    missingPastDays,
+    stale,
+    hasLedgerRows: ledgerCount > 0
+  };
+}
+
 function assignmentPeriodForUserProfile(db, user, profileId, from, to) {
   const id = String(profileId || '').trim();
   const userId = String(user?.id || '').trim();
@@ -1496,12 +1570,13 @@ function readAgencyLedgerView(db, user, query = {}) {
   const profileFilter = String(query.profileId || '').trim();
   const operatorFilter = String(query.operatorId || '').trim();
   let rows = Object.values(db.agencyBonusLedger || {}).filter(row => {
+    const effectiveOperatorId = ledgerRowOperatorId(db, row);
     const profileAllowed = !row.profileId || scope.profileIds.has(String(row.profileId));
-    const operatorAllowed = !row.assignedOperatorId || scope.operatorIds.has(String(row.assignedOperatorId));
+    const operatorAllowed = !effectiveOperatorId || scope.operatorIds.has(effectiveOperatorId);
     if (!profileAllowed && !operatorAllowed) return false;
     if (!rowVisibleForUserAssignment(db, user, row)) return false;
     if (profileFilter && String(row.profileId || '') !== profileFilter) return false;
-    if (operatorFilter && String(row.assignedOperatorId || '') !== operatorFilter) return false;
+    if (!ledgerRowMatchesOperatorFilter(db, row, operatorFilter)) return false;
     return useCalendarDate
       ? agencyLedgerCalendarDateInRange(row, from, to)
       : agencyLedgerDateInRange(row, from, to);
@@ -1520,7 +1595,7 @@ function readAgencyLedgerView(db, user, query = {}) {
   for (const row of rows) {
     const amount = Number(row.amount || 0);
     const profileId = String(row.profileId || '');
-    const operatorId = String(row.assignedOperatorId || '');
+    const operatorId = ledgerRowOperatorId(db, row);
     const rowDate = parseAgencyRowDate(row.date);
     if (rowDate) {
       const businessDate = dreamBusinessDateKey(rowDate);
@@ -5309,8 +5384,10 @@ app.get('/api/agencyos/dashboard/operators', requireAdminPanelViewer, (req, res)
   if (!user) return res.status(404).json({ ok: false, error: 'User not found' });
   try {
     const requester = resolveAdminPanelRequester(db, user, req.query?.adminId);
+    if (backfillAssignmentHistory(db)) writeDb(db);
     const yearRange = dashboardYearRange(req.query?.year);
     const monthRange = dashboardMonthRange(yearRange.year, req.query?.month);
+    const balanceMeta = dashboardBalanceSyncMeta(db, requester, monthRange);
     const operators = dashboardOperatorsForRange(db, requester, monthRange.from, monthRange.to);
     const rows = operators.map(operator => {
       const ledger = readAgencyLedgerView(db, operator, {
@@ -5333,7 +5410,7 @@ app.get('/api/agencyos/dashboard/operators', requireAdminPanelViewer, (req, res)
         profileCount: profileIdsAssignedToUserInDateRange(db, operator, monthRange.from, monthRange.to).length
       };
     });
-    res.json({ ok: true, year: yearRange.year, month: monthRange.month, rows });
+    res.json({ ok: true, year: yearRange.year, month: monthRange.month, rows, balanceMeta });
   } catch (error) {
     res.status(error.status || 400).json({ ok: false, error: error.message || 'Could not load dashboard operators' });
   }
@@ -5553,18 +5630,23 @@ app.post('/api/agencyos/dashboard/operators/month-actual/refresh', requireAdminP
     const remainingMissingBefore = monthDays.filter(day => day < today && !refreshMarks[day]).length;
     const refreshed = [];
     const skipped = [];
+    const refreshErrors = [];
     for (const day of refreshDays) {
       if (day !== today && refreshMarks[day]) {
         skipped.push(day);
         continue;
       }
-      await refreshAdminOperatorBalancesForDay(db, requester, day);
+      const dayResult = await refreshAdminOperatorBalancesForDay(db, requester, day);
+      const dayError = String(dayResult?.operators?.find(item => item.error)?.error || '').trim();
+      if (dayError) refreshErrors.push({ day, error: dayError });
       refreshMarks[day] = new Date().toISOString();
       refreshed.push(day);
     }
     const remainingMissing = monthDays.filter(day => day < today && !refreshMarks[day]).length;
     if (!refreshDays.length) skipped.push(refreshDay);
     writeDb(db);
+    const balanceMeta = dashboardBalanceSyncMeta(db, requester, monthRange);
+    const agencyError = refreshErrors[0]?.error || '';
     res.json({
       ok: true,
       year: yearRange.year,
@@ -5574,7 +5656,10 @@ app.post('/api/agencyos/dashboard/operators/month-actual/refresh', requireAdminP
       remainingMissing,
       remainingMissingBefore,
       from: monthRange.from,
-      to: refreshDay
+      to: refreshDay,
+      refreshErrors,
+      agencyError,
+      balanceMeta
     });
   } catch (error) {
     res.status(error.status || 400).json({ ok: false, error: error.message || 'Could not refresh monthly balances' });

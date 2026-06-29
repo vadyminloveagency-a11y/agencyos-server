@@ -25818,6 +25818,18 @@ body.mandarin-home-active .agency-dashboard-status {
   font-weight: 700;
 }
 
+body.mandarin-home-active .agency-dashboard-status.is-ok {
+  color: #7ddea8;
+}
+
+body.mandarin-home-active .agency-dashboard-status.is-warning {
+  color: #f0c06a;
+}
+
+body.mandarin-home-active .agency-dashboard-status.is-error {
+  color: #ff8f8f;
+}
+
 body.mandarin-home-active .agency-dashboard-list {
   max-height: calc(100vh - 126px);
   overflow: auto;
