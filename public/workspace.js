@@ -387,6 +387,28 @@ window.addEventListener('message', event => {
     return;
   }
 
+  if (workspaceEmbedded && event.source === window.parent && event.data?.type === 'AGENCY_WORKSPACE_REFRESH') {
+    if (workspaceInboxListLoading || workspaceListLoadingFilter || workspaceInboxBackgroundScanning) return;
+    const beforeLetters = [...workspaceLetters];
+    workspaceInboxListLoading = true;
+    workspaceListLoadingFilter = 'inbox';
+    renderCurrentWorkspaceState();
+    scanAndSaveInbox(1, { mergeOnly: true, limitRows: false, limitLetters: false })
+      .then(() => reloadWorkspaceInbox())
+      .then(() => {
+        if (hasNewIncomingActivity(beforeLetters, workspaceLetters)) playInboxNewMessageSound();
+        renderCurrentWorkspaceState();
+      })
+      .catch(error => console.warn('Could not refresh workspace inbox page', error))
+      .finally(() => {
+        workspaceInboxListLoading = false;
+        if (workspaceListLoadingFilter === 'inbox') workspaceListLoadingFilter = '';
+        setWorkspaceActionStatus('');
+        renderCurrentWorkspaceState();
+      });
+    return;
+  }
+
   if (event.data?.type === 'DREAM_CRM_STATUS') {
     if (workspaceEmbedded && event.source !== window.parent) return;
     if (!workspaceEmbedded && event.source !== window) return;
@@ -3200,16 +3222,17 @@ function renderAttachments(attachments = [], letter = {}) {
   });
   const kinds = new Set(typedAttachments.map(item => item.kind));
   const onlyKind = kinds.size === 1 ? typedAttachments[0]?.kind : 'file';
-  const label = onlyKind === 'video' ? 'video' : (onlyKind === 'photo' ? 'photo' : 'file');
-  const pluralLabel = label === 'file' ? 'files' : `${label}s`;
-  const itemLabel = cleanAttachments.length === 1 ? label : pluralLabel;
-  const openText = `Open ${itemLabel}`;
-  const hideText = `Hide ${itemLabel}`;
+  const eyeIcon = `
+    <svg class="workspace-attachment-eye" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+      <circle cx="12" cy="12" r="3"></circle>
+    </svg>
+  `;
+  const loadingDots = '<span class="workspace-attachment-loading-dots" aria-label="Loading"><i></i><i></i><i></i></span>';
   return `
     <details class="workspace-attachments" open>
-      <summary>
-        <span class="workspace-attachments-open-label">${escapeHtml(hideText)}</span>
-        <span class="workspace-attachments-closed-label">${escapeHtml(openText)}</span>
+      <summary title="Show or hide files" aria-label="Show or hide files">
+        ${eyeIcon}
       </summary>
       <div class="workspace-attachment-previews">
         ${typedAttachments.map((item, index) => {
@@ -3220,7 +3243,7 @@ function renderAttachments(attachments = [], letter = {}) {
                 <div class="workspace-live-attachment-slot"
                   data-live-attachment-kind="${escapeAttr(isVideo ? 'video' : 'image')}"
                   data-live-attachment-url="${escapeAttr(letter?.messageLink || letter?.sourceUrl || '')}">
-                  <span>Loading ${escapeHtml(isVideo ? 'video' : 'photo')}...</span>
+                  ${loadingDots}
                 </div>
               </figure>`;
           }
@@ -3255,7 +3278,7 @@ async function loadWorkspaceLiveAttachmentSlot(slot) {
   const targetUrl = messageLink || String(letter?.messageLink || '').trim();
   if (!targetUrl) throw new Error('Letter link is missing');
   slot.dataset.loading = 'true';
-  slot.innerHTML = `<span>Loading ${escapeHtml(kind === 'video' ? 'video' : 'photo')}...</span>`;
+  slot.innerHTML = '<span class="workspace-attachment-loading-dots" aria-label="Loading"><i></i><i></i><i></i></span>';
   try {
     const response = await apiFetch('/api/workspace/read-letter', {
       method: 'POST',
@@ -5131,8 +5154,7 @@ if (topOnlineBtn) topOnlineBtn.addEventListener('click', () => {
   renderCurrentWorkspaceState();
 
   if (workspaceListFilter === 'inbox') {
-    if (hasRecentUnansweredInboxLetters()) playInboxNewMessageSound();
-    await openWorkspaceInbox(button);
+    return;
   }
 
   if (workspaceListFilter === 'read') {

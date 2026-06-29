@@ -7402,10 +7402,11 @@ app.post('/api/workspace/letter', async (req, res) => {
   const nextDateText = hasWorkspaceClock(incomingDateText)
     ? incomingDateText
     : (hasWorkspaceClock(currentDateText) ? currentDateText : (dateFromWorkspaceKey(key) || incomingDateText || currentDateText));
-  const attachments = workspaceLiveAttachmentMarkers(
-    incoming.attachments?.length ? incoming.attachments : letters[index].attachments,
-    letters[index]
-  );
+  const incomingAttachments = cleanWorkspaceAttachments(incoming.attachments || []);
+  const savedAttachments = cleanWorkspaceAttachments(letters[index].attachments || []);
+  const attachments = incomingAttachments.length
+    ? incomingAttachments
+    : (savedAttachments.length ? savedAttachments : workspaceLiveAttachmentMarkers([], letters[index]));
   const conversation = Array.isArray(incoming.conversation)
     ? incoming.conversation.map(item => ({
         direction: String(item?.direction || 'incoming').slice(0, 20),

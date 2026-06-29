@@ -9655,6 +9655,58 @@ body.workspace-embedded .workspace-attachments:not([open]) .workspace-attachment
   display: none !important;
 }
 
+body.workspace-embedded .workspace-attachments summary,
+body.workspace-dark-theme.workspace-embedded .workspace-attachments summary {
+  min-width: 28px !important;
+  width: 28px !important;
+  height: 28px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+  color: #d27054 !important;
+  box-shadow: none !important;
+}
+
+body.workspace-embedded .workspace-attachments summary::before,
+body.workspace-dark-theme.workspace-embedded .workspace-attachments summary::before {
+  display: none !important;
+  content: none !important;
+}
+
+body.workspace-embedded .workspace-attachment-eye {
+  width: 18px !important;
+  height: 18px !important;
+  stroke: currentColor !important;
+  stroke-width: 1.8 !important;
+  fill: none !important;
+}
+
+body.workspace-embedded .workspace-attachment-loading-dots {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  min-height: 18px !important;
+}
+
+body.workspace-embedded .workspace-attachment-loading-dots i {
+  width: 4px !important;
+  height: 4px !important;
+  border-radius: 50% !important;
+  background: currentColor !important;
+  opacity: .35 !important;
+  animation: workspaceInboxBgDot 1s ease-in-out infinite !important;
+}
+
+body.workspace-embedded .workspace-attachment-loading-dots i:nth-child(2) {
+  animation-delay: .16s !important;
+}
+
+body.workspace-embedded .workspace-attachment-loading-dots i:nth-child(3) {
+  animation-delay: .32s !important;
+}
+
 body.workspace-embedded .workspace-attachment-previews {
   grid-template-columns: repeat(auto-fit, minmax(180px, 336px)) !important;
 }
