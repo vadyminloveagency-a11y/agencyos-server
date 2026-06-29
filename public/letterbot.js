@@ -19,8 +19,12 @@
   const startBtn = document.getElementById('agencyLetterBotStartBtn');
   const stopBtn = document.getElementById('agencyLetterBotStopBtn');
   const sendNowBtn = document.getElementById('agencyLetterBotSendNowBtn');
+  const clearBtn = document.getElementById('agencyLetterBotClearBtn');
+  const previewModal = document.getElementById('agencyLetterBotPreviewModal');
+  const previewBody = document.getElementById('agencyLetterBotPreviewBody');
+  const previewCloseBtn = document.getElementById('agencyLetterBotPreviewClose');
 
-  const EXPECTED_BUILD = '20260629-4';
+  const EXPECTED_BUILD = '20260629-5';
 
   let letterBotState = null;
   let letterBotBuildId = '';
@@ -105,8 +109,8 @@
 
     if (countdownEl) {
       countdownEl.textContent = running
-        ? `~10 sec between sends · template refresh in ${formatCountdown(letterBotState.nextRunAt)}`
-        : 'Press Start mailing to send this letter to online men';
+        ? `~10 sec · refresh in ${formatCountdown(letterBotState.nextRunAt)}`
+        : 'Press Start mailing to send this letter';
     }
 
     if (errorEl) {
@@ -126,6 +130,50 @@
 
     if (startBtn) startBtn.disabled = running;
     if (stopBtn) stopBtn.disabled = !running;
+    if (clearBtn) clearBtn.disabled = running;
+  }
+
+  function syncMediaBarGlow() {
+    const entryNode = entriesRoot?.querySelector('.agency-letterbot-entry');
+    if (!entryNode) return;
+    const id = entryNode.dataset.entryId || '';
+    const mediaType = entryNode.querySelector(`[data-entry-media="${id}"]:checked`)?.value || 'none';
+    const mediaBar = entryNode.querySelector('.agency-letterbot-media-bar');
+    const hasMedia = Boolean(entryNode.querySelector('.agency-letterbot-preview'));
+    if (mediaBar) {
+      mediaBar.classList.toggle('is-active', Boolean(mediaType) || hasMedia);
+    }
+    entryNode.querySelectorAll('.agency-letterbot-media-chip').forEach(chip => {
+      const input = chip.querySelector('input[type="radio"]');
+      chip.classList.toggle('is-selected', Boolean(input?.checked));
+    });
+    const uploadBtn = entryNode.querySelector('[data-entry-upload]');
+    if (uploadBtn) uploadBtn.classList.toggle('is-selected', hasMedia);
+  }
+
+  function openPreviewModal() {
+    const entry = ensureSingleLetterEntry();
+    const text = entriesRoot?.querySelector(`[data-entry-text="${entry.id}"]`)?.value || entry.text || '';
+    if (!previewModal || !previewBody) return;
+
+    let html = '';
+    if (entry.mediaType === 'photo' && entry.hasMedia && entry.mediaUrl) {
+      html = `<img class="agency-letterbot-preview-large" src="${escapeHtml(entry.mediaUrl)}" alt="">`;
+    } else if (entry.mediaType === 'video' && entry.hasMedia && entry.mediaUrl) {
+      html = `<video class="agency-letterbot-preview-large" src="${escapeHtml(entry.mediaUrl)}" controls autoplay></video>`;
+    } else {
+      html = `<div class="agency-letterbot-preview-text">${escapeHtml(text).replace(/\n/g, '<br>')}</div>`;
+    }
+
+    previewBody.innerHTML = html;
+    previewModal.classList.remove('hidden');
+    previewModal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closePreviewModal() {
+    previewModal?.classList.add('hidden');
+    previewModal?.setAttribute('aria-hidden', 'true');
+    if (previewBody) previewBody.innerHTML = '';
   }
 
   function startCountdownTimer() {
@@ -197,34 +245,54 @@
     return entries[0];
   }
 
+  function wireEntryInteractions() {
+    const entryNode = entriesRoot?.querySelector('.agency-letterbot-entry');
+    if (!entryNode) return;
+    const id = entryNode.dataset.entryId || '';
+
+    entryNode.querySelectorAll(`[data-entry-media="${id}"]`).forEach(input => {
+      input.addEventListener('change', syncMediaBarGlow);
+    });
+
+    entryNode.querySelectorAll('[data-preview-open]').forEach(node => {
+      node.addEventListener('click', event => {
+        if (event.target.closest('[data-entry-upload]')) return;
+        openPreviewModal();
+      });
+    });
+
+    syncMediaBarGlow();
+  }
+
   function renderLetterBotEntries() {
     if (!entriesRoot) return;
     const entry = ensureSingleLetterEntry();
     entriesRoot.innerHTML = `
       <article class="agency-letterbot-entry" data-entry-id="${escapeHtml(entry.id)}">
-        <textarea class="agency-letterbot-text" data-entry-text="${escapeHtml(entry.id)}" rows="8" placeholder="Write your mailing message here...">${escapeHtml(entry.text || '')}</textarea>
-        <div class="agency-letterbot-media-row">
-          <label class="agency-letterbot-media-chip">
+        <textarea class="agency-letterbot-text" data-entry-text="${escapeHtml(entry.id)}" rows="4" placeholder="Write your mailing message here...">${escapeHtml(entry.text || '')}</textarea>
+        <div class="agency-letterbot-media-bar is-active" data-preview-open>
+          <label class="agency-letterbot-media-chip ${entry.mediaType === 'none' ? 'is-selected' : ''}">
             <input type="radio" name="media-${escapeHtml(entry.id)}" value="none" data-entry-media="${escapeHtml(entry.id)}" ${entry.mediaType === 'none' ? 'checked' : ''}>
             <span>Text only</span>
           </label>
-          <label class="agency-letterbot-media-chip">
+          <label class="agency-letterbot-media-chip ${entry.mediaType === 'photo' ? 'is-selected' : ''}">
             <input type="radio" name="media-${escapeHtml(entry.id)}" value="photo" data-entry-media="${escapeHtml(entry.id)}" ${entry.mediaType === 'photo' ? 'checked' : ''}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg>
             <span>Photo</span>
           </label>
-          <label class="agency-letterbot-media-chip">
+          <label class="agency-letterbot-media-chip ${entry.mediaType === 'video' ? 'is-selected' : ''}">
             <input type="radio" name="media-${escapeHtml(entry.id)}" value="video" data-entry-media="${escapeHtml(entry.id)}" ${entry.mediaType === 'video' ? 'checked' : ''}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="6" width="14" height="12" rx="2"/><path d="M17 10l4-2v8l-4-2"/></svg>
             <span>Video</span>
           </label>
           <input type="file" class="agency-letterbot-file hidden" data-entry-file="${escapeHtml(entry.id)}" accept="${entry.mediaType === 'video' ? 'video/mp4' : 'image/jpeg,image/png,image/webp'}">
-          <button type="button" class="agency-letterbot-upload" data-entry-upload="${escapeHtml(entry.id)}">${entry.hasMedia ? escapeHtml(entry.mediaName || 'Change file') : 'Choose file'}</button>
-          ${entry.hasMedia && entry.mediaType === 'photo' && entry.mediaUrl ? `<img class="agency-letterbot-preview" src="${escapeHtml(entry.mediaUrl)}" alt="">` : ''}
-          ${entry.hasMedia && entry.mediaType === 'video' && entry.mediaUrl ? `<video class="agency-letterbot-preview" src="${escapeHtml(entry.mediaUrl)}" controls></video>` : ''}
+          <button type="button" class="agency-letterbot-upload ${entry.hasMedia ? 'is-selected' : ''}" data-entry-upload="${escapeHtml(entry.id)}">${entry.hasMedia ? escapeHtml(entry.mediaName || 'Change file') : 'Choose file'}</button>
+          ${entry.hasMedia && entry.mediaType === 'photo' && entry.mediaUrl ? `<button type="button" class="agency-letterbot-preview-btn" data-preview-open><img class="agency-letterbot-preview" src="${escapeHtml(entry.mediaUrl)}" alt=""></button>` : ''}
+          ${entry.hasMedia && entry.mediaType === 'video' && entry.mediaUrl ? `<button type="button" class="agency-letterbot-preview-btn" data-preview-open><video class="agency-letterbot-preview" src="${escapeHtml(entry.mediaUrl)}" muted></video></button>` : ''}
         </div>
       </article>
     `;
+    wireEntryInteractions();
   }
 
   function collectEntriesFromDom() {
@@ -295,6 +363,18 @@
     updateLetterBotStatus();
   }
 
+  async function clearLetter() {
+    if (letterBotState?.enabled) {
+      alert('Stop mailing before deleting the letter');
+      return;
+    }
+    if (!window.confirm('Delete this letter and attached media?')) return;
+    const result = await apiLetterBot('POST', '/clear');
+    letterBotState = result.letterbot;
+    renderLetterBotEntries();
+    updateLetterBotStatus();
+  }
+
   async function uploadEntryMedia(entryId, file, mediaType) {
     if (!file) return;
     if (mediaType === 'video') {
@@ -340,6 +420,7 @@
   entriesRoot?.addEventListener('click', async event => {
     const uploadBtn = event.target.closest('[data-entry-upload]');
     if (uploadBtn) {
+      event.stopPropagation();
       const id = uploadBtn.dataset.entryUpload || '';
       const mediaType = entriesRoot.querySelector(`[data-entry-media="${id}"]:checked`)?.value || 'none';
       if (mediaType === 'none') {
@@ -364,7 +445,20 @@
         }
       };
       input.click();
+      return;
     }
+
+    if (event.target.closest('[data-preview-open]')) {
+      openPreviewModal();
+    }
+  });
+
+  previewCloseBtn?.addEventListener('click', closePreviewModal);
+  previewModal?.querySelectorAll('[data-preview-close]').forEach(node => {
+    node.addEventListener('click', closePreviewModal);
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closePreviewModal();
   });
 
   saveBtn?.addEventListener('click', () => {
@@ -372,6 +466,12 @@
     saveLetterBotConfig()
       .catch(error => alert(error.message || 'Could not save'))
       .finally(() => { saveBtn.disabled = false; });
+  });
+  clearBtn?.addEventListener('click', () => {
+    clearBtn.disabled = true;
+    clearLetter()
+      .catch(error => alert(error.message || 'Could not delete letter'))
+      .finally(() => { clearBtn.disabled = false; });
   });
   startBtn?.addEventListener('click', () => {
     startBtn.disabled = true;

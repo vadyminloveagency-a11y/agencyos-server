@@ -8,7 +8,7 @@ const LETTERBOT_DEFAULT_AUDIENCE = 'online';
 const LETTERBOT_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const LETTERBOT_MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const LETTERBOT_SEND_TICK_MS = 10_000;
-const LETTERBOT_BUILD_ID = '20260629-4';
+const LETTERBOT_BUILD_ID = '20260629-5';
 const letterBotRunsInFlight = new Map();
 const letterBotSendLoops = new Map();
 
@@ -492,11 +492,22 @@ async function triggerDreamLetterSend(page) {
 
 async function saveLetterBotTemplate(page, entry, mediaAbsolutePath) {
   await openLetterBotComposePage(page);
-  const editor = page.frameLocator('.cke_wysiwyg_frame.cke_reset').first();
-  await editor.locator('body').click({ timeout: 10_000 }).catch(() => {});
-  const paragraph = editor.locator('p').first();
-  await paragraph.click({ timeout: 10_000 }).catch(() => {});
-  await paragraph.fill(String(entry.text || '').trim(), { timeout: 15_000 });
+  const letterText = String(entry.text || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  const editorFrame = page.frameLocator('.cke_wysiwyg_frame.cke_reset').first();
+  await editorFrame.locator('body').click({ timeout: 10_000 }).catch(() => {});
+  await editorFrame.locator('body').evaluate((body, text) => {
+    const paragraphs = [...body.querySelectorAll('p')];
+    let first = paragraphs[0];
+    if (!first) {
+      first = body.ownerDocument.createElement('p');
+      body.appendChild(first);
+    }
+    paragraphs.slice(1).forEach(node => node.remove());
+    first.innerText = text;
+  }, letterText);
 
   if (entry.mediaType === 'video' && mediaAbsolutePath) {
     let attached = false;
@@ -826,6 +837,37 @@ function registerLetterBotRoutes(app, deps) {
       res.json({ ok: true, letterbot: publicLetterBotConfig(profile, id, letterBotMediaRoot) });
     } catch (error) {
       res.status(error.status || 500).json({ ok: false, error: error.message || 'Could not stop LetterBot' });
+    }
+  });
+
+  app.post('/api/profiles/:id/letterbot/clear', requireUser, (req, res) => {
+    const db = readDb();
+    const id = String(req.params.id);
+    try {
+      const profile = requireProfileForUser(db, req.user, id);
+      const config = normalizeLetterBotConfig(profile.letterBot);
+      if (config.enabled) {
+        return res.status(400).json({ ok: false, error: 'Stop mailing before deleting the letter' });
+      }
+      for (const entry of config.entries) {
+        if (entry?.mediaFile) deleteLetterBotMedia(letterBotMediaRoot, entry);
+      }
+      profile.letterBot = normalizeLetterBotConfig({
+        ...config,
+        entries: [{
+          id: crypto.randomUUID(),
+          text: '',
+          mediaType: 'none',
+          mediaName: '',
+          mediaMime: '',
+          mediaFile: ''
+        }]
+      });
+      profile.updatedAt = new Date().toISOString();
+      writeDb(db);
+      res.json({ ok: true, letterbot: publicLetterBotConfig(profile, id, letterBotMediaRoot) });
+    } catch (error) {
+      res.status(error.status || 500).json({ ok: false, error: error.message || 'Could not clear letter' });
     }
   });
 

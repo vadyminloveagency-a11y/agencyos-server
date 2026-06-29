@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20260629-letterbot-3">
+  <link rel="stylesheet" href="style.css?v=20260629-5">
   <style>
     body.mandarin-home-active { min-height: 100vh !important; overflow: hidden !important; background: #0f1626 !important; }
     body.mandarin-home-active .app-layout,
@@ -789,6 +789,7 @@
             <section class="agency-letterbot-compose-card">
               <div class="agency-letterbot-compose-head">
                 <span class="agency-letterbot-compose-label">NEW MAILING</span>
+                <button id="agencyLetterBotClearBtn" class="agency-letterbot-clear-btn" type="button">Delete letter</button>
               </div>
               <div id="agencyLetterBotEntries" class="agency-letterbot-entries"></div>
               <div class="agency-letterbot-compose-footer">
@@ -858,7 +859,7 @@
                     </svg>
                   </span>
                 </div>
-                <span class="agency-letterbot-stat-hint">this letter</span>
+                <span class="agency-letterbot-stat-hint">men received</span>
               </div>
             </div>
 
@@ -867,6 +868,13 @@
         </div>
       </div>
     </section>
+    <div id="agencyLetterBotPreviewModal" class="agency-letterbot-preview-modal hidden" aria-hidden="true">
+      <div class="agency-letterbot-preview-backdrop" data-preview-close></div>
+      <div class="agency-letterbot-preview-window" role="dialog" aria-modal="true" aria-label="Letter preview">
+        <button id="agencyLetterBotPreviewClose" class="agency-letterbot-preview-close" type="button" aria-label="Close">×</button>
+        <div id="agencyLetterBotPreviewBody" class="agency-letterbot-preview-body"></div>
+      </div>
+    </div>
     <section class="agency-coming-soon-panel hidden" data-agency-panel="sender" aria-label="Sender">
       <div class="agency-coming-soon-card">
         <span class="agency-coming-soon-icon" aria-hidden="true">
@@ -1423,8 +1431,8 @@
     </div>
   </div>
 </div>
-  <script src="letterbot.js?v=20260629-4"></script>
-  <script src="app.js?v=20260629-4"></script>
+  <script src="letterbot.js?v=20260629-5"></script>
+  <script src="app.js?v=20260629-5"></script>
 </body>
 </html>
 
