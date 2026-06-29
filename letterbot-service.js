@@ -8,7 +8,7 @@ const LETTERBOT_DEFAULT_AUDIENCE = 'online';
 const LETTERBOT_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const LETTERBOT_MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const LETTERBOT_SEND_TICK_MS = 10_000;
-const LETTERBOT_BUILD_ID = '20260629-9';
+const LETTERBOT_BUILD_ID = '20260629-10';
 const letterBotRunsInFlight = new Map();
 const letterBotSendLoops = new Map();
 const letterBotStatsRefreshAt = new Map();
@@ -744,6 +744,30 @@ async function maybeRunLetterBot(deps, profileId) {
   return true;
 }
 
+function queueLetterBotRun(deps, profileId, options = {}) {
+  const id = String(profileId || '');
+  runLetterBotNow(deps, id, options).catch(error => {
+    console.warn(`[letterbot] ${id}: ${error.message || error}`);
+    try {
+      const db = deps.readDb();
+      const profile = db.profiles?.[id];
+      if (!profile) return;
+      const config = normalizeLetterBotConfig(profile.letterBot);
+      config.lastError = error.message || 'LetterBot failed';
+      config.lastRunAt = new Date().toISOString();
+      if (options.enable === true) {
+        config.enabled = false;
+        stopLetterBotSendLoop(id);
+      }
+      profile.letterBot = config;
+      profile.updatedAt = new Date().toISOString();
+      deps.writeDb(db);
+    } catch (writeError) {
+      console.warn(`[letterbot] ${id}: could not save failure state`, writeError.message || writeError);
+    }
+  });
+}
+
 function registerLetterBotRoutes(app, deps) {
   const { requireUser, requireProfileForUser, readDb, writeDb, letterBotMediaRoot } = deps;
 
@@ -753,9 +777,15 @@ function registerLetterBotRoutes(app, deps) {
     try {
       const profile = requireProfileForUser(db, req.user, id);
       if (req.query.refreshStats === '1' && deps.dreamBrowserSessions.has(id)) {
-        await refreshLetterBotDreamStatsIfDue(deps, id, profile).catch(() => {});
-        profile.updatedAt = new Date().toISOString();
-        writeDb(db);
+        refreshLetterBotDreamStatsIfDue(deps, id, profile)
+          .then(() => {
+            const freshDb = readDb();
+            const freshProfile = freshDb.profiles?.[id];
+            if (!freshProfile) return;
+            freshProfile.updatedAt = new Date().toISOString();
+            writeDb(freshDb);
+          })
+          .catch(() => {});
       }
       res.json({ ok: true, letterbot: publicLetterBotConfig(profile, id, letterBotMediaRoot) });
     } catch (error) {
@@ -887,8 +917,9 @@ function registerLetterBotRoutes(app, deps) {
       profile.letterBot = config;
       profile.updatedAt = new Date().toISOString();
       writeDb(db);
-      const letterbot = await runLetterBotNow(deps, id, { enable: true });
-      res.json({ ok: true, letterbot });
+      const letterbot = publicLetterBotConfig(profile, id, letterBotMediaRoot);
+      res.json({ ok: true, letterbot, queued: true });
+      queueLetterBotRun(deps, id, { enable: true });
     } catch (error) {
       res.status(error.status || 500).json({ ok: false, error: error.message || 'Could not start LetterBot' });
     }
@@ -942,11 +973,16 @@ function registerLetterBotRoutes(app, deps) {
     }
   });
 
-  app.post('/api/profiles/:id/letterbot/send-now', requireUser, async (req, res) => {
+  app.post('/api/profiles/:id/letterbot/send-now', requireUser, (req, res) => {
+    const db = readDb();
     const id = String(req.params.id);
     try {
-      const letterbot = await runLetterBotNow(deps, id, {});
-      res.json({ ok: true, letterbot });
+      const profile = requireProfileForUser(db, req.user, id);
+      if (!pickLetterBotEntry(normalizeLetterBotConfig(profile.letterBot))) {
+        return res.status(400).json({ ok: false, error: 'Add at least one letter text' });
+      }
+      res.json({ ok: true, letterbot: publicLetterBotConfig(profile, id, letterBotMediaRoot), queued: true });
+      queueLetterBotRun(deps, id, {});
     } catch (error) {
       res.status(error.status || 500).json({ ok: false, error: error.message || 'Could not send letter' });
     }

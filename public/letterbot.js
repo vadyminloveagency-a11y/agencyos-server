@@ -25,7 +25,27 @@
   const previewBody = document.getElementById('agencyLetterBotPreviewBody');
   const previewCloseBtn = document.getElementById('agencyLetterBotPreviewClose');
 
-  const EXPECTED_BUILD = '20260629-9';
+  const EXPECTED_BUILD = '20260629-10';
+
+  async function parseApiJson(response) {
+    const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+    const text = await response.text();
+    if (contentType.includes('application/json')) {
+      try {
+        return JSON.parse(text);
+      } catch {
+        // fall through
+      }
+    }
+    if (text.trimStart().startsWith('<')) {
+      throw new Error(`Server returned HTML (status ${response.status}). Deploy may be restarting — wait 30 sec and try again.`);
+    }
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error(text.slice(0, 200) || `Request failed (${response.status})`);
+    }
+  }
 
   let letterBotState = null;
   let letterBotBuildId = '';
@@ -206,7 +226,6 @@
 
   function startLetterBotPoll() {
     stopLetterBotPoll();
-    if (!letterBotState?.enabled) return;
     letterBotPollTimer = window.setInterval(() => {
       if (!letterBotState?.enabled) {
         stopLetterBotPoll();
@@ -357,7 +376,7 @@
       headers: body ? { 'Content-Type': 'application/json' } : undefined,
       body: body ? JSON.stringify(body) : undefined
     });
-    const result = await response.json();
+    const result = await parseApiJson(response);
     if (!response.ok) throw new Error(result.error || 'LetterBot request failed');
     return result;
   }
@@ -369,7 +388,7 @@
     try {
       const health = await fetch('/api/health').then(r => r.json()).catch(() => ({}));
       letterBotBuildId = String(health?.letterBotBuild || '');
-      const result = await apiLetterBot('GET', '?refreshStats=1');
+      const result = await apiLetterBot('GET');
       letterBotState = result.letterbot || null;
       if (intervalInput && letterBotState) intervalInput.value = String(letterBotState.intervalMinutes || 20);
       renderLetterBotEntries();
@@ -515,6 +534,7 @@
       .then(() => apiLetterBot('POST', '/start'))
       .then(result => {
         letterBotState = result.letterbot;
+        if (letterBotState) letterBotState.enabled = true;
         renderLetterBotEntries();
         updateLetterBotStatus();
         startLetterBotPoll();
