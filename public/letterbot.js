@@ -24,7 +24,7 @@
   const previewBody = document.getElementById('agencyLetterBotPreviewBody');
   const previewCloseBtn = document.getElementById('agencyLetterBotPreviewClose');
 
-  const EXPECTED_BUILD = '20260629-5';
+  const EXPECTED_BUILD = '20260629-7';
 
   let letterBotState = null;
   let letterBotBuildId = '';
@@ -41,6 +41,20 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  function formatLetterTextHtml(text) {
+    const safe = escapeHtml(text).replace(/\n/g, '<br>');
+    return safe.replace(/(Myjchina)/gi, '<span class="agency-letterbot-word-glow">$1</span>');
+  }
+
+  function syncLetterTextHighlight(entryId) {
+    const textarea = entriesRoot?.querySelector(`[data-entry-text="${entryId}"]`);
+    const highlight = entriesRoot?.querySelector(`[data-entry-highlight="${entryId}"]`);
+    if (!textarea || !highlight) return;
+    highlight.innerHTML = `${formatLetterTextHtml(textarea.value)}<br>`;
+    highlight.scrollTop = textarea.scrollTop;
+    highlight.scrollLeft = textarea.scrollLeft;
   }
 
   function profileOnline() {
@@ -162,7 +176,7 @@
     } else if (entry.mediaType === 'video' && entry.hasMedia && entry.mediaUrl) {
       html = `<video class="agency-letterbot-preview-large" src="${escapeHtml(entry.mediaUrl)}" controls autoplay></video>`;
     } else {
-      html = `<div class="agency-letterbot-preview-text">${escapeHtml(text).replace(/\n/g, '<br>')}</div>`;
+      html = `<div class="agency-letterbot-preview-text">${formatLetterTextHtml(text)}</div>`;
     }
 
     previewBody.innerHTML = html;
@@ -261,6 +275,13 @@
       });
     });
 
+    const textarea = entryNode.querySelector(`[data-entry-text="${id}"]`);
+    if (textarea) {
+      textarea.addEventListener('input', () => syncLetterTextHighlight(id));
+      textarea.addEventListener('scroll', () => syncLetterTextHighlight(id));
+      syncLetterTextHighlight(id);
+    }
+
     syncMediaBarGlow();
   }
 
@@ -269,7 +290,10 @@
     const entry = ensureSingleLetterEntry();
     entriesRoot.innerHTML = `
       <article class="agency-letterbot-entry" data-entry-id="${escapeHtml(entry.id)}">
-        <textarea class="agency-letterbot-text" data-entry-text="${escapeHtml(entry.id)}" rows="4" placeholder="Write your mailing message here...">${escapeHtml(entry.text || '')}</textarea>
+        <div class="agency-letterbot-text-wrap">
+          <div class="agency-letterbot-text-highlight" data-entry-highlight="${escapeHtml(entry.id)}" aria-hidden="true"></div>
+          <textarea class="agency-letterbot-text" data-entry-text="${escapeHtml(entry.id)}" placeholder="Write your mailing message here...">${escapeHtml(entry.text || '')}</textarea>
+        </div>
         <div class="agency-letterbot-media-bar is-active" data-preview-open>
           <label class="agency-letterbot-media-chip ${entry.mediaType === 'none' ? 'is-selected' : ''}">
             <input type="radio" name="media-${escapeHtml(entry.id)}" value="none" data-entry-media="${escapeHtml(entry.id)}" ${entry.mediaType === 'none' ? 'checked' : ''}>

@@ -8,7 +8,7 @@ const LETTERBOT_DEFAULT_AUDIENCE = 'online';
 const LETTERBOT_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const LETTERBOT_MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const LETTERBOT_SEND_TICK_MS = 10_000;
-const LETTERBOT_BUILD_ID = '20260629-5';
+const LETTERBOT_BUILD_ID = '20260629-7';
 const letterBotRunsInFlight = new Map();
 const letterBotSendLoops = new Map();
 
@@ -27,6 +27,7 @@ function defaultLetterBotConfig() {
     menSentToday: 0,
     menSentDay: '',
     sessionStartedAt: '',
+    sendEvents: [],
     entries: []
   };
 }
@@ -45,7 +46,7 @@ function normalizeLetterBotConfig(raw) {
     })).filter(item => item.text.trim() || item.mediaType !== 'none')
     : [];
   const singleEntry = singleLetterBotEntry(entries);
-  return {
+  const normalized = {
     ...base,
     enabled: raw.enabled === true,
     intervalMinutes: Math.min(240, Math.max(5, Number(raw.intervalMinutes) || 20)),
@@ -60,8 +61,12 @@ function normalizeLetterBotConfig(raw) {
     menSentToday: Math.max(0, Number(raw.menSentToday) || 0),
     menSentDay: String(raw.menSentDay || ''),
     sessionStartedAt: String(raw.sessionStartedAt || ''),
+    sendEvents: Array.isArray(raw.sendEvents)
+      ? raw.sendEvents.map(item => String(item || '')).filter(Boolean).slice(-2000)
+      : [],
     entries: singleEntry ? [singleEntry] : []
   };
+  return recomputeLetterBotSendCounters(normalized);
 }
 
 function letterBotMediaDir(mediaRoot, profileId) {
@@ -161,19 +166,47 @@ function letterBotTodayKey(date = new Date()) {
   return date.toISOString().slice(0, 10);
 }
 
-function ensureLetterBotDailyCounter(config) {
+function recomputeLetterBotSendCounters(config) {
   const today = letterBotTodayKey();
-  if (config.menSentDay !== today) {
-    config.menSentDay = today;
-    config.menSentToday = 0;
+  const sessionStart = Date.parse(config.sessionStartedAt || '');
+  const events = Array.isArray(config.sendEvents) ? config.sendEvents : [];
+  let todayCount = 0;
+  let sessionCount = 0;
+  for (const at of events) {
+    const stamp = String(at || '');
+    const ts = Date.parse(stamp);
+    if (!Number.isFinite(ts)) continue;
+    if (stamp.slice(0, 10) === today) todayCount += 1;
+    if (Number.isFinite(sessionStart) && ts >= sessionStart) sessionCount += 1;
   }
+  config.menSentDay = today;
+  config.menSentToday = todayCount;
+  config.menSentSession = sessionCount;
   return config;
+}
+
+function ensureLetterBotDailyCounter(config) {
+  return recomputeLetterBotSendCounters(config);
 }
 
 function resetLetterBotSessionCounters(config) {
   config.menSentSession = 0;
   config.sessionStartedAt = new Date().toISOString();
-  ensureLetterBotDailyCounter(config);
+  return recomputeLetterBotSendCounters(config);
+}
+
+function recordLetterBotSends(profile, count = 1) {
+  const config = normalizeLetterBotConfig(profile.letterBot);
+  const delta = Math.max(0, Number(count) || 0);
+  if (!delta) return config;
+  const now = new Date().toISOString();
+  const events = Array.isArray(config.sendEvents) ? config.sendEvents.slice() : [];
+  for (let i = 0; i < delta; i += 1) events.push(now);
+  config.sendEvents = events.slice(-2000);
+  recomputeLetterBotSendCounters(config);
+  config.lastSuccessAt = now;
+  config.lastError = '';
+  profile.letterBot = config;
   return config;
 }
 
@@ -206,57 +239,52 @@ function markLetterBotTemplateRun(profile, success = true) {
   return config;
 }
 
-function markLetterBotSendSuccess(profile, increment = 1) {
-  const config = normalizeLetterBotConfig(profile.letterBot);
-  ensureLetterBotDailyCounter(config);
-  const delta = Math.max(0, Number(increment) || 0);
-  if (delta > 0) {
-    config.menSentSession = Math.max(0, Number(config.menSentSession) || 0) + delta;
-    config.menSentToday = Math.max(0, Number(config.menSentToday) || 0) + delta;
-  }
-  config.lastSuccessAt = new Date().toISOString();
-  config.lastError = '';
-  profile.letterBot = config;
-  return config;
-}
-
 async function readDreamMenSentCount(page) {
   return page.evaluate(() => {
-    const direct = [
-      document.getElementById('sentCount'),
-      document.getElementById('lettersSent'),
-      document.querySelector('[data-sent-count]'),
-      document.querySelector('.sent-count'),
-      document.querySelector('#countSent')
-    ].filter(Boolean);
-    for (const node of direct) {
+    const ids = ['sentCount', 'lettersSent', 'countSent', 'sentMen', 'menSent'];
+    for (const id of ids) {
+      const node = document.getElementById(id);
+      if (!node) continue;
       const value = parseInt(String(node.textContent || node.value || '').replace(/[^\d]/g, ''), 10);
       if (Number.isFinite(value) && value >= 0) return value;
     }
-    const text = document.body?.innerText || '';
-    const patterns = [
-      /(?:sent|processed|delivered)\s*[:\-]?\s*(\d+)/i,
-      /(\d+)\s*(?:men|gentlemen|letters?)\s*(?:sent|processed)/i,
-      /success(?:fully)?\s*sent\s*(\d+)/i
-    ];
-    for (const pattern of patterns) {
-      const match = text.match(pattern);
+
+    const dataNode = document.querySelector('[data-sent-count]');
+    if (dataNode) {
+      const value = parseInt(String(dataNode.getAttribute('data-sent-count') || dataNode.textContent || '').replace(/[^\d]/g, ''), 10);
+      if (Number.isFinite(value) && value >= 0) return value;
+    }
+
+    const countNode = document.querySelector('.sent-count');
+    if (countNode) {
+      const value = parseInt(String(countNode.textContent || '').replace(/[^\d]/g, ''), 10);
+      if (Number.isFinite(value) && value >= 0) return value;
+    }
+
+    const statusBox = document.querySelector('#sendStatus, .send-status, #mailingStats, .mailing-stats');
+    if (statusBox) {
+      const text = statusBox.innerText || '';
+      const match = text.match(/(?:sent|processed|delivered)\s*[:\-]?\s*(\d+)/i);
       if (match) return parseInt(match[1], 10);
     }
+
     return null;
   }).catch(() => null);
 }
 
-function syncLetterBotMenSentFromDream(profile, dreamCount) {
-  if (!Number.isFinite(dreamCount) || dreamCount < 0) return;
-  const config = normalizeLetterBotConfig(profile.letterBot);
-  ensureLetterBotDailyCounter(config);
-  if (dreamCount > (Number(config.menSentSession) || 0)) {
-    const delta = dreamCount - (Number(config.menSentSession) || 0);
-    config.menSentSession = dreamCount;
-    config.menSentToday = Math.max(0, Number(config.menSentToday) || 0) + delta;
+async function confirmDreamLetterSend(page, beforeCount) {
+  await page.waitForTimeout(2500);
+  const afterCount = await readDreamMenSentCount(page);
+  if (Number.isFinite(beforeCount) && Number.isFinite(afterCount) && afterCount > beforeCount) {
+    return afterCount - beforeCount;
   }
-  profile.letterBot = config;
+
+  const alertConfirmed = await page.evaluate(() => {
+    const alerts = [...document.querySelectorAll('.alert-success, .alert.alert-success')];
+    return alerts.some(node => /message sent|letter sent|successfully sent|was sent/i.test(node.textContent || ''));
+  }).catch(() => false);
+
+  return alertConfirmed ? 1 : 0;
 }
 
 function stopLetterBotSendLoop(profileId) {
@@ -577,12 +605,14 @@ async function trySendOneDreamLetter(deps, profileId) {
   const ready = await waitForDreamSendReady(page, 5000);
   if (!ready) return false;
 
+  const beforeCount = await readDreamMenSentCount(page);
   const result = await triggerDreamLetterSend(page);
   if (!result?.ok) return false;
 
-  markLetterBotSendSuccess(profile, 1);
-  const dreamCount = await readDreamMenSentCount(page);
-  if (dreamCount != null) syncLetterBotMenSentFromDream(profile, dreamCount);
+  const sentCount = await confirmDreamLetterSend(page, beforeCount);
+  if (!sentCount) return false;
+
+  recordLetterBotSends(profile, sentCount);
   profile.updatedAt = new Date().toISOString();
   deps.writeDb(db);
   return true;
@@ -625,10 +655,15 @@ async function runLetterBotNow(deps, profileId, options = {}) {
 
     const templateOnly = options.templateOnly === true;
     if (!templateOnly) {
-      await sendLetterBotOnDream(page);
-      markLetterBotSendSuccess(profile, 1);
-      const dreamCount = await readDreamMenSentCount(page);
-      if (dreamCount != null) syncLetterBotMenSentFromDream(profile, dreamCount);
+      await openLetterBotSendPage(page);
+      await selectLetterBotOnlineFilter(page);
+      const ready = await waitForDreamSendReady(page);
+      if (!ready) throw new Error('Dream is not ready to send letters yet. Check that the template saved and the sendout page shows Ready to begin sending.');
+      const beforeCount = await readDreamMenSentCount(page);
+      const sendResult = await triggerDreamLetterSend(page);
+      if (!sendResult?.ok) throw new Error(sendResult?.reason || 'Could not send letter on Dream');
+      const sentCount = await confirmDreamLetterSend(page, beforeCount);
+      if (sentCount) recordLetterBotSends(profile, sentCount);
     }
 
     if (options.enable === true) {
