@@ -390,21 +390,25 @@ window.addEventListener('message', event => {
   if (workspaceEmbedded && event.source === window.parent && event.data?.type === 'AGENCY_WORKSPACE_REFRESH') {
     if (workspaceInboxListLoading || workspaceListLoadingFilter || workspaceInboxBackgroundScanning) return;
     const beforeLetters = [...workspaceLetters];
+    const beforeStats = workspaceListStats(beforeLetters);
     workspaceInboxListLoading = true;
     workspaceListLoadingFilter = 'inbox';
+    setWorkspaceActionStatus('Checking Inbox page 1...');
     renderCurrentWorkspaceState();
     scanAndSaveInbox(1, { mergeOnly: true, limitRows: false, limitLetters: false })
       .then(() => reloadWorkspaceInbox())
       .then(() => {
         if (hasNewIncomingActivity(beforeLetters, workspaceLetters)) playInboxNewMessageSound();
+        const deltaText = workspaceStatsDeltaText(beforeStats, workspaceListStats(workspaceLetters));
+        setWorkspaceActionStatus(deltaText ? `Inbox updated: ${deltaText}` : 'Inbox checked: no new letters');
         renderCurrentWorkspaceState();
       })
       .catch(error => console.warn('Could not refresh workspace inbox page', error))
       .finally(() => {
         workspaceInboxListLoading = false;
         if (workspaceListLoadingFilter === 'inbox') workspaceListLoadingFilter = '';
-        setWorkspaceActionStatus('');
         renderCurrentWorkspaceState();
+        window.setTimeout(() => setWorkspaceActionStatus(''), 4500);
       });
     return;
   }
@@ -689,6 +693,32 @@ function hasNewIncomingActivity(beforeLetters = [], afterLetters = workspaceLett
   const beforeMenSet = pendingIncomingManIdSet(beforeLetters);
   const afterMenSet = pendingIncomingManIdSet(afterLetters);
   return [...afterMenSet].some(id => !beforeMenSet.has(id));
+}
+
+function workspaceListStats(letters = workspaceLetters) {
+  const clean = Array.isArray(letters) ? letters : [];
+  return {
+    total: clean.length,
+    inbox: recentUnansweredInboxCount(clean),
+    noReply: noReplyEligibleCount(clean),
+    read: clean.filter(letter =>
+      letter?.direction === 'outgoing' &&
+      letter?.readByMan === true
+    ).length
+  };
+}
+
+function workspaceStatsDeltaText(before = {}, after = {}) {
+  const parts = [];
+  const totalDelta = Number(after.total || 0) - Number(before.total || 0);
+  const inboxDelta = Number(after.inbox || 0) - Number(before.inbox || 0);
+  const noReplyDelta = Number(after.noReply || 0) - Number(before.noReply || 0);
+  const readDelta = Number(after.read || 0) - Number(before.read || 0);
+  if (totalDelta) parts.push(`letters ${totalDelta > 0 ? '+' : ''}${totalDelta}`);
+  if (inboxDelta) parts.push(`Inbox ${inboxDelta > 0 ? '+' : ''}${inboxDelta}`);
+  if (noReplyDelta) parts.push(`No Reply ${noReplyDelta > 0 ? '+' : ''}${noReplyDelta}`);
+  if (readDelta) parts.push(`Read ${readDelta > 0 ? '+' : ''}${readDelta}`);
+  return parts.join(', ');
 }
 
 function isFreshPendingIncomingLetter(letter) {
@@ -1138,12 +1168,13 @@ function renderList() {
       Number(letter.sortDate || 0) >= Date.now() - 24 * 60 * 60 * 1000
     ).length, 0);
   if (!['inbox', 'read', 'noreply'].includes(workspaceListFilter)) workspaceListFilter = 'inbox';
+  const loadingDots = '<span class="workspace-inbox-bg-dots" aria-label="Loading"><i></i><i></i><i></i></span>';
   if (inboxFilterBtn) {
     inboxFilterBtn.disabled = false;
     inboxFilterBtn.classList.toggle('active', workspaceListFilter === 'inbox');
     inboxFilterBtn.classList.toggle('loading', listLoadingActive && workspaceListFilter === 'inbox');
-    const backgroundDots = workspaceInboxBackgroundScanning
-      ? '<span class="workspace-inbox-bg-dots" aria-label="Background scan"><i></i><i></i><i></i></span>'
+    const backgroundDots = (workspaceInboxBackgroundScanning || listLoadingActive && workspaceListFilter === 'inbox')
+      ? loadingDots
       : '';
     inboxFilterBtn.innerHTML = `Inbox <span class="workspace-filter-count-text">+${escapeHtml(inboxUnansweredCount)}</span>${backgroundDots}`;
   }
@@ -1151,7 +1182,7 @@ function renderList() {
     readFilterBtn.disabled = false;
     readFilterBtn.classList.toggle('active', workspaceListFilter === 'read');
     readFilterBtn.classList.toggle('loading', listLoadingActive && workspaceListFilter === 'read');
-    readFilterBtn.innerHTML = `Read <span class="workspace-filter-count-text">${escapeHtml(readCount)}</span>`;
+    readFilterBtn.innerHTML = `Read <span class="workspace-filter-count-text">${escapeHtml(readCount)}</span>${listLoadingActive && workspaceListFilter === 'read' ? loadingDots : ''}`;
   }
   if (copyReadIdsBtn) {
     const readIds = uniqueReadRowIds(readRows);
@@ -1164,7 +1195,7 @@ function renderList() {
     noReplyFilterBtn.disabled = false;
     noReplyFilterBtn.classList.toggle('active', workspaceListFilter === 'noreply');
     noReplyFilterBtn.classList.toggle('loading', listLoadingActive && workspaceListFilter === 'noreply');
-    noReplyFilterBtn.innerHTML = `No Reply <span class="workspace-filter-count-text">+${escapeHtml(noReplyCount)}</span>`;
+    noReplyFilterBtn.innerHTML = `No Reply <span class="workspace-filter-count-text">+${escapeHtml(noReplyCount)}</span>${listLoadingActive && workspaceListFilter === 'noreply' ? loadingDots : ''}`;
   }
   if (onlyOnlineBtn) {
     onlyOnlineBtn.classList.toggle('active', workspaceOnlyOnline);
@@ -4233,7 +4264,8 @@ async function scanAndSaveSentTargets(targets, rows = workspaceSyncRows(), optio
 
 async function scanAndSaveReadLetters() {
   const rows = workspaceSyncRows();
-  setWorkspaceActionStatus(`Scanning read sent letters: ${rows} page${rows === 1 ? '' : 's'}`);
+  const beforeStats = workspaceListStats(workspaceLetters);
+  setWorkspaceActionStatus(`Checking Read letters: ${rows} sent page${rows === 1 ? '' : 's'}...`);
   const response = await apiFetch('/api/workspace/scan-sent', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -4244,7 +4276,10 @@ async function scanAndSaveReadLetters() {
     })
   });
   workspaceLetters = response.letters || workspaceLetters;
-  setWorkspaceActionStatus(`Read sent letters saved: ${response.imported || 0} letters`);
+  const deltaText = workspaceStatsDeltaText(beforeStats, workspaceListStats(workspaceLetters));
+  setWorkspaceActionStatus(deltaText
+    ? `Read updated: ${deltaText}`
+    : `Read checked: ${response.imported || 0} rows, no changes`);
   return { letters: workspaceLetters, scannedLetters: response.letters || [] };
 }
 
@@ -5170,18 +5205,32 @@ if (topOnlineBtn) topOnlineBtn.addEventListener('click', () => {
     } finally {
       if (workspaceListLoadingFilter === 'read') workspaceListLoadingFilter = '';
       renderCurrentWorkspaceState();
+      window.setTimeout(() => setWorkspaceActionStatus(''), 4500);
     }
   }
 
   if (workspaceListFilter === 'noreply') {
+    const beforeLetters = [...workspaceLetters];
+    const beforeStats = workspaceListStats(beforeLetters);
     workspaceListLoadingFilter = 'noreply';
     renderList();
-    window.setTimeout(() => {
+    try {
+      setWorkspaceActionStatus('Checking No Reply from Inbox page 1...');
+      await scanAndSaveInbox(1, { mergeOnly: true, limitRows: false, limitLetters: false });
+      await reloadWorkspaceInbox();
+      if (hasNewIncomingActivity(beforeLetters, workspaceLetters)) playInboxNewMessageSound();
+      const deltaText = workspaceStatsDeltaText(beforeStats, workspaceListStats(workspaceLetters));
+      setWorkspaceActionStatus(deltaText ? `No Reply updated: ${deltaText}` : 'No Reply checked: no changes');
+    } catch (error) {
+      console.warn('Could not refresh No Reply list', error);
+      setWorkspaceActionStatus('No Reply check failed');
+    } finally {
       if (workspaceListLoadingFilter === 'noreply') {
         workspaceListLoadingFilter = '';
         renderCurrentWorkspaceState();
       }
-    }, 450);
+      window.setTimeout(() => setWorkspaceActionStatus(''), 4500);
+    }
   }
 }));
 sentBtn?.addEventListener('click', syncSentLetters);
