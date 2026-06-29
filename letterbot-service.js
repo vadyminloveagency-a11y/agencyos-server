@@ -2,8 +2,8 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
-const DREAM_LETTER_BOT_URL = 'https://www.dream-singles.com/members/messaging/bot/send';
-const DREAM_LETTER_BOT_FALLBACK_URL = 'https://www.dream-singles.com/members/messaging/bot/';
+const DREAM_LETTER_BOT_COMPOSE_URL = 'https://www.dream-singles.com/members/messaging/bot/';
+const DREAM_LETTER_BOT_SEND_URL = 'https://www.dream-singles.com/members/messaging/bot/send';
 const LETTERBOT_DEFAULT_AUDIENCE = 'online';
 const LETTERBOT_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const LETTERBOT_MAX_PHOTO_BYTES = 8 * 1024 * 1024;
@@ -174,14 +174,35 @@ function profileLetterBotUser(db, profileId, currentAssignedUserForProfile) {
   return Object.values(db.users || {}).find(user => (user.profileIds || []).includes(profileId)) || null;
 }
 
-async function openLetterBotPage(page) {
-  for (const url of [DREAM_LETTER_BOT_URL, DREAM_LETTER_BOT_FALLBACK_URL]) {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-    const hasEditor = await page.locator('.cke_wysiwyg_frame').count();
-    const hasFilters = await page.locator('input[type="radio"]').count();
-    if (hasEditor || hasFilters) return url;
+async function dismissDreamPopups(page) {
+  const labels = [/^OK$/i, /^I agree$/i, /^I don't want to know$/i, /^Enable Sound$/i];
+  for (const label of labels) {
+    const control = page.locator('button, a, input[type="button"], input[type="submit"]').filter({ hasText: label }).first();
+    if (await control.count().catch(() => 0)) {
+      await control.click({ timeout: 1500 }).catch(() => {});
+    }
   }
-  throw new Error('Letter Sendout page did not load');
+}
+
+async function gotoLetterBotUrl(page, targetUrl) {
+  await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  await page.waitForTimeout(1200);
+  await dismissDreamPopups(page);
+  const currentUrl = page.url();
+  if (!/\/members\/messaging\/bot/i.test(currentUrl)) {
+    throw new Error('Dream session expired. Turn profile Off and On again, then retry LetterBot.');
+  }
+  return currentUrl;
+}
+
+async function openLetterBotComposePage(page) {
+  await gotoLetterBotUrl(page, DREAM_LETTER_BOT_COMPOSE_URL);
+  await page.waitForSelector('.cke_wysiwyg_frame', { timeout: 45_000 });
+}
+
+async function openLetterBotSendPage(page) {
+  await gotoLetterBotUrl(page, DREAM_LETTER_BOT_SEND_URL);
+  await page.waitForSelector('input[type="radio"]', { timeout: 45_000 });
 }
 
 async function selectLetterBotOnlineFilter(page) {
@@ -238,9 +259,7 @@ async function selectLetterBotOnlineFilter(page) {
 }
 
 async function runLetterBotOnPage(page, entry, mediaAbsolutePath) {
-  await openLetterBotPage(page);
-  await selectLetterBotOnlineFilter(page);
-  await page.waitForSelector('.cke_wysiwyg_frame', { timeout: 45_000 });
+  await openLetterBotComposePage(page);
   const editor = page.frameLocator('.cke_wysiwyg_frame.cke_reset').first();
   await editor.locator('body').click({ timeout: 10_000 }).catch(() => {});
   const paragraph = editor.locator('p').first();
@@ -273,10 +292,18 @@ async function runLetterBotOnPage(page, entry, mediaAbsolutePath) {
   }
 
   await page.waitForTimeout(1500);
-  const saveButton = page.locator('#bot_save');
-  if (!(await saveButton.count())) throw new Error('Save button was not found on Letter Sendout page');
-  await saveButton.click({ timeout: 15_000 });
+  const composeSaveButton = page.locator('#bot_save');
+  if (!(await composeSaveButton.count())) throw new Error('Save button was not found on Letter Sendout page');
+  await composeSaveButton.click({ timeout: 15_000 });
   await page.waitForTimeout(2500);
+
+  await openLetterBotSendPage(page);
+  await selectLetterBotOnlineFilter(page);
+  const sendButton = page.locator('#bot_save, button, input[type="submit"], a').filter({ hasText: /send|start|begin|save/i }).first();
+  if (await sendButton.count()) {
+    await sendButton.click({ timeout: 15_000 }).catch(() => {});
+    await page.waitForTimeout(2500);
+  }
 }
 
 async function runLetterBotNow(deps, profileId, options = {}) {
@@ -307,9 +334,10 @@ async function runLetterBotNow(deps, profileId, options = {}) {
 
     let browserSession = deps.dreamBrowserSessions.get(id);
     if (!browserSession?.page) {
-      browserSession = await deps.startDreamBrowser(db, user, id, { force: false, headless: true });
+      browserSession = await deps.startDreamBrowser(db, user, id, { force: false, headless: true, refreshDreamSession: true });
     }
     const page = browserSession.page;
+    await page.goto('https://www.dream-singles.com/members/messaging/inbox', { waitUntil: 'domcontentloaded', timeout: 45_000 }).catch(() => {});
     await runLetterBotOnPage(page, entry, mediaAbsolutePath);
 
     scheduleLetterBotNext(profile, true);
