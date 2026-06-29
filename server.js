@@ -62,7 +62,7 @@ const DREAM_XHR_HEADERS = {
   'sec-ch-ua-platform': '"Windows"'
 };
 
-const letterBotService = require('./letterbot-service');
+import * as letterBotService from './letterbot-service.js';
 const ALLOWED_STATUSES = ['', 'SERIOUS', 'SEXTER', 'OTHER'];
 const DEFAULT_SALARY_RATES = [
   { min: 0, max: 1499, percent: 40 },

@@ -1,6 +1,6 @@
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
+import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 
 const DREAM_LETTER_BOT_URL = 'https://www.dream-singles.com/members/messaging/bot/';
 const LETTERBOT_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
@@ -466,7 +466,7 @@ function startLetterBotScheduler(deps) {
   }, 60_000).unref?.();
 }
 
-module.exports = {
+export {
   defaultLetterBotConfig,
   normalizeLetterBotConfig,
   publicLetterBotConfig,
