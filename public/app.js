@@ -1619,11 +1619,8 @@ agencyInboxFrame?.addEventListener('load', clearProfileSwitchOverlayOnFrameLoad)
 function reloadWorkspaceEmbed(reason = 'refresh') {
   const shouldAutoloadInbox = [
     'connect',
-    'sidebar-profile',
     'sidebar-profile-power',
-    'profile-select',
-    'connect-all',
-    'agency-inbox'
+    'connect-all'
   ].includes(String(reason || ''));
   [workspaceEmbedFrame, agencyInboxFrame].forEach(frame => {
     if (!frame) return;
@@ -1654,11 +1651,7 @@ function reloadWorkspaceEmbedForProfile(profileId, reason = 'switch-profile') {
   const shouldAutoloadInbox = [
     'connect',
     'sidebar-profile-power',
-    'connect-all',
-    'agency-inbox',
-    'agency-inbox-open',
-    'switch-profile',
-    'sidebar-profile'
+    'connect-all'
   ].includes(String(reason || ''));
   [workspaceEmbedFrame, agencyInboxFrame].forEach(frame => {
     if (!frame) return;
@@ -2407,7 +2400,7 @@ async function loadProfilePendingCount(profileId, options = {}) {
           headers,
           body: JSON.stringify({
             sourceProfileId: id,
-            maxPages: options.maxPages || 3,
+            maxPages: options.maxPages || 1,
             syncFavorites: false
           })
         })
@@ -2602,7 +2595,7 @@ async function connectProfileById(profileId, options = {}) {
     if (options.syncInbox === false) {
       loadProfilePendingCount(id, {
         scan: true,
-        maxPages: options.maxPages || 3,
+        maxPages: 1,
         playSound: options.playSound !== false
       }).catch(() => {});
     }
