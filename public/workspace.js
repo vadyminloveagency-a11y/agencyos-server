@@ -367,7 +367,10 @@ function resetWorkspaceRuntimeForProfile(profileId) {
 
 async function switchWorkspaceProfileFromShell(profileId) {
   const id = String(profileId || '');
-  if (!id || id === activeProfileId) return;
+  if (!id || id === activeProfileId) {
+    postWorkspaceReady();
+    return;
+  }
   renderLoading();
   try {
     resetWorkspaceRuntimeForProfile(id);
@@ -377,6 +380,7 @@ async function switchWorkspaceProfileFromShell(profileId) {
     }
   } finally {
     setWorkspaceActionStatus('');
+    postWorkspaceReady();
   }
 }
 

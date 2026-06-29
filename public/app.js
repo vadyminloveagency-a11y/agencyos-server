@@ -2549,9 +2549,11 @@ async function switchWorkingProfile(profileId, options = {}) {
   const id = String(profileId || '');
   const profile = availableProfiles.find(item => String(item.id) === id);
   if (!profile) return;
-  if (profileSwitchInProgress && activeProfileId === id) return;
+  const sameProfile = String(activeProfileId) === id;
+  if (profileSwitchInProgress && sameProfile) return;
   profileSwitchInProgress = true;
-  setProfileSwitchOverlay(true, profile);
+  const switchingProfile = !sameProfile;
+  if (switchingProfile) setProfileSwitchOverlay(true, profile);
   try {
     activeProfileId = id;
     localStorage.setItem('dream_crm_profile_id', id);
@@ -2560,23 +2562,33 @@ async function switchWorkingProfile(profileId, options = {}) {
     renderProfileSwitcher(profile);
     updateLadyConnectionButton();
     renderSidebarProfileDock();
-    switchWorkspaceProfileInPlace(id, options.reason || 'switch-profile');
-    allMen = [];
-    chatFavoriteMen = [];
-    clearMainVirtualState();
-    clearFavoritesVirtualState();
-    clearChatVirtualState();
-    if (tbody) tbody.innerHTML = '';
-    if (chatFavoritesBody) chatFavoritesBody.innerHTML = '';
-    updateCounter();
+    if (switchingProfile) {
+      switchWorkspaceProfileInPlace(id, options.reason || 'switch-profile');
+      allMen = [];
+      chatFavoriteMen = [];
+      clearMainVirtualState();
+      clearFavoritesVirtualState();
+      clearChatVirtualState();
+      if (tbody) tbody.innerHTML = '';
+      if (chatFavoritesBody) chatFavoritesBody.innerHTML = '';
+      updateCounter();
+    } else {
+      syncAgencyInboxAccess();
+      syncAgencyFavoritesAccess();
+      syncAgencyNavLocks();
+    }
     if (ladyConnected) {
       const activeAgencyPanel = getActiveAgencyPanel();
-      const shouldLoadLegacyMen = !activeAgencyPanel || activeAgencyPanel === 'favorites';
-      if (currentView === 'chat') await loadChatFavorites().catch(() => {});
+      const shouldLoadLegacyMen = switchingProfile && (!activeAgencyPanel || activeAgencyPanel === 'favorites');
+      if (switchingProfile && currentView === 'chat') await loadChatFavorites().catch(() => {});
       else if (shouldLoadLegacyMen) await loadMen(false).catch(() => {});
       if (document.body.classList.contains('mandarin-home-active')) {
-        if ((localStorage.getItem(AGENCY_PANEL_KEY) || '') === 'favorites') activateAgencyPanel('favorites', { reloadFavorites: true, persist: false });
-        if ((localStorage.getItem(AGENCY_PANEL_KEY) || '') === 'inbox') activateAgencyPanel('inbox', { reloadInbox: false, persist: false });
+        if (switchingProfile && (localStorage.getItem(AGENCY_PANEL_KEY) || '') === 'favorites') {
+          activateAgencyPanel('favorites', { reloadFavorites: true, persist: false });
+        }
+        if ((localStorage.getItem(AGENCY_PANEL_KEY) || '') === 'inbox') {
+          activateAgencyPanel('inbox', { reloadInbox: false, persist: false });
+        }
       }
     }
   } finally {
