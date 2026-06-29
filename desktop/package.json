@@ -32,7 +32,13 @@
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "AgencyOS-Setup-${version}.exe"
     },
     "publish": {
       "provider": "generic",

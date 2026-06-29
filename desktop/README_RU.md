@@ -45,10 +45,14 @@ npm start -- --server=http://localhost:3000
 
 ```powershell
 cd desktop
+npm install
+$env:CSC_IDENTITY_AUTO_DISCOVERY="false"
 npm run dist
 ```
 
-Готовый установщик появится в `release/desktop/`.
+Готовый установщик: `release/desktop/AgencyOS-Setup-0.2.0.exe`
+
+Портативная версия без установки: `release/desktop/win-unpacked/AgencyOS.exe`
 
 ## Автообновление
 
