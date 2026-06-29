@@ -179,12 +179,6 @@ function pickLetterBotEntry(config) {
   const entry = entries[index];
   return { entry, index, total: entries.length };
 }
-  const entries = (config.entries || []).filter(item => String(item.text || '').trim());
-  if (!entries.length) return null;
-  const index = config.queueIndex % entries.length;
-  const entry = entries[index];
-  return { entry, index, total: entries.length };
-}
 
 function markLetterBotTemplateRun(profile, success = true) {
   const config = normalizeLetterBotConfig(profile.letterBot);
