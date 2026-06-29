@@ -1626,16 +1626,46 @@ function refreshWorkspaceEmbedInPlace(reason = 'refresh') {
 
 function reloadWorkspaceEmbedForProfile(profileId, reason = 'switch-profile') {
   const id = String(profileId || activeProfileId || '');
+  const shouldAutoloadInbox = [
+    'connect',
+    'sidebar-profile-power',
+    'connect-all',
+    'agency-inbox',
+    'agency-inbox-open',
+    'switch-profile',
+    'sidebar-profile'
+  ].includes(String(reason || ''));
   [workspaceEmbedFrame, agencyInboxFrame].forEach(frame => {
     if (!frame) return;
     const url = new URL('workspace.html', window.location.href);
     url.searchParams.set('embedded', '1');
-    url.searchParams.set('autoloadInbox', '0');
+    url.searchParams.set('autoloadInbox', shouldAutoloadInbox ? '1' : '0');
     url.searchParams.set('clearSelection', '1');
     url.searchParams.set('profileId', id);
     url.searchParams.set('v', `20260629-profile-${reason}-${Date.now()}`);
+    frame.dataset.workspaceProfileId = id;
+    frame.dataset.workspaceReady = '0';
     frame.src = `workspace.html?${url.searchParams.toString()}`;
   });
+}
+
+function notifyWorkspaceProfileConnected(profileId, options = {}) {
+  const id = String(profileId || activeProfileId || '');
+  const reason = String(options.reason || 'connect');
+  let messaged = false;
+  [workspaceEmbedFrame, agencyInboxFrame].forEach(frame => {
+    if (!frame?.contentWindow) return;
+    frame.contentWindow.postMessage({
+      source: 'agencyos',
+      type: 'AGENCY_WORKSPACE_PROFILE_CONNECTED',
+      profileId: id,
+      reason
+    }, '*');
+    messaged = true;
+  });
+  if (!messaged || getActiveAgencyPanel() === 'inbox') {
+    reloadWorkspaceEmbedForProfile(id, reason);
+  }
 }
 
 function switchWorkspaceProfileInPlace(profileId, reason = 'switch-profile') {
@@ -2514,6 +2544,7 @@ async function connectProfileById(profileId, options = {}) {
     profileServerConnectedById.set(id, true);
     setProfileMarkedConnected(id, true);
     syncActiveLadyConnectedFromProfiles();
+    notifyWorkspaceProfileConnected(id, { reason: 'connect' });
     const noReplyCount = agencyPendingLetterCount(result?.letters || []);
     setAgencyProfilePendingCount(id, noReplyCount, { playSound: options.playSound !== false });
     loadProfilePendingCount(id, {
@@ -2576,6 +2607,9 @@ async function switchWorkingProfile(profileId, options = {}) {
       syncAgencyInboxAccess();
       syncAgencyFavoritesAccess();
       syncAgencyNavLocks();
+      if (ladyConnected && ['connect-all', 'sidebar-profile-power', 'connect'].includes(options.reason || '')) {
+        notifyWorkspaceProfileConnected(id, { reason: options.reason || 'connect' });
+      }
     }
     if (ladyConnected) {
       const activeAgencyPanel = getActiveAgencyPanel();
@@ -2587,7 +2621,7 @@ async function switchWorkingProfile(profileId, options = {}) {
           activateAgencyPanel('favorites', { reloadFavorites: true, persist: false });
         }
         if ((localStorage.getItem(AGENCY_PANEL_KEY) || '') === 'inbox') {
-          activateAgencyPanel('inbox', { reloadInbox: false, persist: false });
+          activateAgencyPanel('inbox', { reloadInbox: true, persist: false });
         }
       }
     }
@@ -2827,6 +2861,10 @@ window.addEventListener('message', event => {
   }
   if (event.data?.source === 'dream-workspace' && event.data?.type === 'WORKSPACE_READY' && workspaceCommandFrame) {
     const readyId = String(event.data.profileId || '');
+    if (workspaceCommandFrame === agencyInboxFrame) {
+      agencyInboxFrame.dataset.workspaceReady = '1';
+      agencyInboxFrame.dataset.workspaceProfileId = readyId;
+    }
     if (document.body.classList.contains('agency-profile-switching') && readyId === String(activeProfileId || '')) {
       waitForAgencyPaint().then(() => setProfileSwitchOverlay(false));
     }
@@ -7560,7 +7598,15 @@ function activateAgencyPanel(view, options = {}) {
   } else if (panelView === 'inbox') {
     stopAgencyDashboardAutoBalance();
     closeAgencyDashboardCalendar();
-    if (syncAgencyInboxAccess() && options.reloadInbox) reloadWorkspaceEmbed('agency-inbox');
+    if (syncAgencyInboxAccess()) {
+      const frameProfileId = agencyInboxFrame?.dataset.workspaceProfileId || '';
+      const frameReady = agencyInboxFrame?.dataset.workspaceReady === '1';
+      const needsReload = options.reloadInbox
+        || !frameReady
+        || frameProfileId !== String(activeProfileId || '');
+      if (needsReload) reloadWorkspaceEmbedForProfile(activeProfileId, options.reloadInbox ? 'agency-inbox' : 'agency-inbox-open');
+      else refreshWorkspaceEmbedInPlace('agency-inbox');
+    }
   } else if (panelView === 'favorites') {
     stopAgencyDashboardAutoBalance();
     closeAgencyDashboardCalendar();

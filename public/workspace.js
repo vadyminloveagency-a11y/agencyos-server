@@ -385,6 +385,16 @@ async function switchWorkspaceProfileFromShell(profileId) {
 }
 
 window.addEventListener('message', event => {
+  if (workspaceEmbedded && event.source === window.parent && event.data?.type === 'AGENCY_WORKSPACE_PROFILE_CONNECTED') {
+    const id = String(event.data.profileId || '');
+    if (id && id !== activeProfileId) resetWorkspaceRuntimeForProfile(id);
+    loadWorkspace().catch(error => {
+      console.warn('Could not reload workspace after profile connect', error);
+      menList.innerHTML = `<div class="workspace-muted-state">${escapeHtml(error.message || 'Could not load inbox')}</div>`;
+    });
+    return;
+  }
+
   if (workspaceEmbedded && event.source === window.parent && event.data?.type === 'AGENCY_WORKSPACE_PROFILE_SWITCH') {
     switchWorkspaceProfileFromShell(event.data.profileId).catch(error => {
       console.warn('Could not switch workspace profile in place', error);
