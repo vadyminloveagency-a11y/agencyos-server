@@ -22,6 +22,7 @@ const DB_PATH = process.env.DREAM_TEAM_DB_PATH || path.join(DATA_DIR, 'data.json
 const DB_BACKUP_PATH = process.env.DREAM_TEAM_DB_BACKUP_PATH || path.join(DATA_DIR, 'data.backup-before-profile-scope.json');
 const PHOTOS_DIR = process.env.DREAM_TEAM_PHOTOS_DIR || (USING_RUNTIME_DATA_DIR ? path.join(DATA_DIR, 'photos') : path.join(__dirname, 'public', 'photos'));
 const WORKSPACE_ATTACHMENTS_DIR = process.env.DREAM_TEAM_WORKSPACE_ATTACHMENTS_DIR || (USING_RUNTIME_DATA_DIR ? path.join(DATA_DIR, 'workspace-attachments') : path.join(__dirname, 'public', 'workspace-attachments'));
+const LETTERBOT_MEDIA_DIR = process.env.DREAM_TEAM_LETTERBOT_MEDIA_DIR || (USING_RUNTIME_DATA_DIR ? path.join(DATA_DIR, 'letterbot-media') : path.join(__dirname, 'public', 'letterbot-media'));
 const ALLOWED_PROFILES_PATH = process.env.DREAM_TEAM_ALLOWED_PROFILES_PATH || path.join(DATA_DIR, 'allowed_profiles.json');
 const CREDENTIAL_KEY_PATH = process.env.DREAM_TEAM_CREDENTIAL_KEY_PATH || path.join(DATA_DIR, '.credential-key');
 const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL || '';
@@ -61,6 +62,7 @@ const DREAM_XHR_HEADERS = {
   'sec-ch-ua-platform': '"Windows"'
 };
 
+const letterBotService = require('./letterbot-service');
 const ALLOWED_STATUSES = ['', 'SERIOUS', 'SEXTER', 'OTHER'];
 const DEFAULT_SALARY_RATES = [
   { min: 0, max: 1499, percent: 40 },
@@ -83,6 +85,12 @@ app.use('/photos', express.static(PHOTOS_DIR, {
 app.use('/workspace-attachments', express.static(WORKSPACE_ATTACHMENTS_DIR, {
   setHeaders(res) {
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  }
+}));
+fs.mkdirSync(LETTERBOT_MEDIA_DIR, { recursive: true });
+app.use('/letterbot-media', express.static(LETTERBOT_MEDIA_DIR, {
+  setHeaders(res) {
+    res.setHeader('Cache-Control', 'private, max-age=300');
   }
 }));
 app.use(express.static(path.join(__dirname, 'public'), {
@@ -8063,6 +8071,19 @@ async function startServer() {
   try {
     await initializeDatabase();
     migrateDatabase();
+    const letterBotDeps = {
+      requireUser,
+      requireProfileForUser,
+      readDb,
+      writeDb,
+      letterBotMediaRoot: LETTERBOT_MEDIA_DIR,
+      dreamSessions,
+      dreamBrowserSessions,
+      startDreamBrowser,
+      currentAssignedUserForProfile
+    };
+    letterBotService.registerLetterBotRoutes(app, letterBotDeps);
+    letterBotService.startLetterBotScheduler(letterBotDeps);
     app.listen(PORT, () => {
       console.log(`Dream Local CRM is running: http://localhost:${PORT}`);
     });

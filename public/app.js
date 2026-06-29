@@ -2265,6 +2265,7 @@ async function syncProfileConnectionStatuses() {
     syncAgencyProfilePowerToggle();
     syncAgencyInboxAccess();
     syncAgencyFavoritesAccess();
+    syncAgencyLetterBotAccess?.();
     syncAgencyNavLocks();
   } catch (error) {
     console.warn('Could not sync profile connection statuses', error);
@@ -2504,6 +2505,10 @@ function isActiveProfileOnline() {
     && isProfileServerConnected(activeProfileId);
 }
 
+window.isActiveProfileOnline = isActiveProfileOnline;
+Object.defineProperty(window, 'activeProfileId', { get: () => activeProfileId, configurable: true });
+Object.defineProperty(window, 'currentUser', { get: () => currentUser, configurable: true });
+
 function syncAgencyNavLocks() {
   const profileReady = isActiveProfileOnline();
   mandarinHomeScreen?.querySelectorAll('.agency-shell-nav-item[data-agency-view]').forEach(item => {
@@ -2560,6 +2565,7 @@ async function connectProfileById(profileId, options = {}) {
     syncAgencyProfilePowerToggle();
     syncAgencyInboxAccess();
     syncAgencyFavoritesAccess();
+    syncAgencyLetterBotAccess?.();
   }
 }
 
@@ -2606,6 +2612,7 @@ async function switchWorkingProfile(profileId, options = {}) {
     } else {
       syncAgencyInboxAccess();
       syncAgencyFavoritesAccess();
+      syncAgencyLetterBotAccess?.();
       syncAgencyNavLocks();
       if (ladyConnected && ['connect-all', 'sidebar-profile-power', 'connect'].includes(options.reason || '')) {
         notifyWorkspaceProfileConnected(id, { reason: options.reason || 'connect' });
@@ -2622,6 +2629,9 @@ async function switchWorkingProfile(profileId, options = {}) {
         }
         if ((localStorage.getItem(AGENCY_PANEL_KEY) || '') === 'inbox') {
           activateAgencyPanel('inbox', { reloadInbox: true, persist: false });
+        }
+        if ((localStorage.getItem(AGENCY_PANEL_KEY) || '') === 'letterbot') {
+          activateAgencyPanel('letterbot', { persist: false });
         }
       }
     }
@@ -2679,6 +2689,7 @@ async function disconnectProfileById(profileId, reason = 'sidebar-profile-power'
       if (document.body.classList.contains('mandarin-home-active')) {
         syncAgencyInboxAccess();
         syncAgencyFavoritesAccess();
+        syncAgencyLetterBotAccess?.();
         activateAgencyPanel('home', { persist: false });
       }
     }
@@ -6828,6 +6839,7 @@ mandarinHomeScreen?.addEventListener('click', event => {
   if (!authorizeButton) return;
   if (authorizeButton.id === 'agencyInboxAuthorizeBtn') pendingAgencyProfileChoicePanel = 'inbox';
   else if (authorizeButton.id === 'agencyFavoritesAuthorizeBtn') pendingAgencyProfileChoicePanel = 'favorites';
+  else if (authorizeButton.id === 'agencyLetterBotAuthorizeBtn') pendingAgencyProfileChoicePanel = 'letterbot';
   else return;
   event.preventDefault();
   event.stopPropagation();
@@ -7171,6 +7183,10 @@ async function refreshCurrentAgencyPanel() {
     else await loadMen({ skipAutoOnline: true });
     mountAgencyFavoritesView();
     updateAgencyFavoritesCount();
+    return true;
+  }
+  if (panel === 'letterbot') {
+    loadAgencyLetterBotPanel?.();
     return true;
   }
   if (panel === 'account-manager') {
@@ -7622,6 +7638,12 @@ function activateAgencyPanel(view, options = {}) {
         loadMen(false).finally(updateAgencyFavoritesCount);
       }
     }
+  } else if (panelView === 'letterbot') {
+    stopAgencyDashboardAutoBalance();
+    closeAgencyDashboardCalendar();
+    if (syncAgencyLetterBotAccess?.()) {
+      loadAgencyLetterBotPanel?.();
+    }
   } else {
     stopAgencyDashboardAutoBalance();
     closeAgencyDashboardCalendar();
@@ -7742,6 +7764,7 @@ function showMandarinHome(options = {}) {
   syncAgencyAccountTabs();
   syncAgencyInboxAccess();
   syncAgencyFavoritesAccess();
+  syncAgencyLetterBotAccess?.();
   if (resetPanel) {
     localStorage.setItem(AGENCY_PANEL_KEY, 'home');
     activateAgencyPanel('home', { persist: false });
@@ -10246,6 +10269,7 @@ async function refreshSessionQuietly() {
   syncAgencyAccountTabs();
   syncAgencyInboxAccess();
   syncAgencyFavoritesAccess();
+  syncAgencyLetterBotAccess?.();
   if (agencyShellUserName) agencyShellUserName.textContent = currentUser?.name || currentUser?.username || 'Account';
   if (agencyShellAvatar) agencyShellAvatar.textContent = (currentUser?.name || currentUser?.username || 'A').slice(0, 1).toUpperCase();
   if (agencyShellUserRole) {

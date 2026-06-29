@@ -24467,6 +24467,7 @@ body.mandarin-home-active.app-dark-theme #agencyProfilePowerToggle.agency-profil
   color: #f5eee9 !important;
 }
 
+body.mandarin-home-active .agency-letterbot-panel,
 body.mandarin-home-active .agency-coming-soon-panel {
   min-height: 100vh !important;
   display: grid !important;
@@ -27330,6 +27331,7 @@ body.mandarin-home-active .agency-account-manager,
 body.mandarin-home-active .agency-dashboard-panel,
 body.mandarin-home-active .agency-favorites-panel,
 body.mandarin-home-active .agency-inbox-panel,
+body.mandarin-home-active .agency-letterbot-panel,
 body.mandarin-home-active .agency-coming-soon-panel {
   width: calc((100vw - 212px) / var(--main-page-zoom)) !important;
   height: calc(100vh / var(--main-page-zoom)) !important;
@@ -27393,6 +27395,7 @@ body.mandarin-home-active.app-dark-theme #agencyInboxFrame {
   background: #1b1816 !important;
 }
 
+body.mandarin-home-active .agency-letterbot-panel,
 body.mandarin-home-active .agency-coming-soon-panel {
   padding: 0 !important;
   overflow: hidden !important;
@@ -27434,13 +27437,15 @@ body.mandarin-home-active.agency-panel-inbox #agencyInboxFrame {
 
 /* Locked Inbox/Favorites cards: identical full-area alignment. */
 body.mandarin-home-active .agency-inbox-panel.is-locked,
-body.mandarin-home-active .agency-favorites-panel.is-locked {
+body.mandarin-home-active .agency-favorites-panel.is-locked,
+body.mandarin-home-active .agency-letterbot-panel.is-locked {
   padding: 0 !important;
   overflow: hidden !important;
 }
 
 body.mandarin-home-active .agency-inbox-panel.is-locked .agency-inbox-no-access,
-body.mandarin-home-active .agency-favorites-panel.is-locked .agency-inbox-no-access {
+body.mandarin-home-active .agency-favorites-panel.is-locked .agency-inbox-no-access,
+body.mandarin-home-active .agency-letterbot-panel.is-locked .agency-inbox-no-access {
   width: 100% !important;
   height: 100% !important;
   min-height: 0 !important;
@@ -27716,6 +27721,7 @@ body.mandarin-home-active .agency-account-manager,
 body.mandarin-home-active .agency-dashboard-panel,
 body.mandarin-home-active .agency-favorites-panel,
 body.mandarin-home-active .agency-inbox-panel,
+body.mandarin-home-active .agency-letterbot-panel,
 body.mandarin-home-active .agency-coming-soon-panel {
   width: 100% !important;
   height: 100vh !important;
@@ -29049,4 +29055,225 @@ body.mandarin-home-active .agency-dashboard-empty {
   padding: 18px !important;
   font-size: 12px !important;
   font-weight: 650 !important;
+}
+
+/* LetterBot panel */
+body.mandarin-home-active.agency-panel-letterbot .agency-letterbot-panel {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100vh !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  background: #f8f6f3 !important;
+}
+
+body.mandarin-home-active.app-dark-theme.agency-panel-letterbot .agency-letterbot-panel {
+  background: #141210 !important;
+}
+
+body.mandarin-home-active .agency-letterbot-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+  padding: 16px 18px 24px;
+  overflow: hidden;
+}
+
+body.mandarin-home-active .agency-letterbot-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+body.mandarin-home-active .agency-letterbot-interval {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6d625a;
+}
+
+body.mandarin-home-active .agency-letterbot-interval input {
+  width: 88px;
+  padding: 8px 10px;
+  border: 1px solid #ddd4cb;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 14px;
+}
+
+body.mandarin-home-active.app-dark-theme .agency-letterbot-interval {
+  color: #b9aea4;
+}
+
+body.mandarin-home-active.app-dark-theme .agency-letterbot-interval input {
+  background: #1f1b18;
+  border-color: #3a332d;
+  color: #f3ece4;
+}
+
+body.mandarin-home-active .agency-letterbot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+body.mandarin-home-active .agency-letterbot-btn {
+  padding: 9px 14px;
+  border: 1px solid #ddd4cb;
+  border-radius: 10px;
+  background: #fff;
+  color: #3f3832;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+body.mandarin-home-active .agency-letterbot-btn.primary {
+  background: #c96f52;
+  border-color: #c96f52;
+  color: #fff;
+}
+
+body.mandarin-home-active .agency-letterbot-btn.danger {
+  background: #fff;
+  border-color: #d1785f;
+  color: #b85a43;
+}
+
+body.mandarin-home-active .agency-letterbot-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+body.mandarin-home-active.app-dark-theme .agency-letterbot-btn {
+  background: #1f1b18;
+  border-color: #3a332d;
+  color: #f3ece4;
+}
+
+body.mandarin-home-active .agency-letterbot-status,
+body.mandarin-home-active .agency-letterbot-countdown {
+  font-size: 13px;
+  color: #6d625a;
+}
+
+body.mandarin-home-active.app-dark-theme .agency-letterbot-status,
+body.mandarin-home-active.app-dark-theme .agency-letterbot-countdown {
+  color: #b9aea4;
+}
+
+body.mandarin-home-active .agency-letterbot-entries {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 4px;
+}
+
+body.mandarin-home-active .agency-letterbot-entry {
+  border: 1px solid #e7ddd3;
+  border-radius: 14px;
+  background: #fff;
+  padding: 14px;
+}
+
+body.mandarin-home-active.app-dark-theme .agency-letterbot-entry {
+  background: #1b1816;
+  border-color: #3a332d;
+}
+
+body.mandarin-home-active .agency-letterbot-entry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+body.mandarin-home-active .agency-letterbot-text {
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+  border: 1px solid #ddd4cb;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.45;
+  box-sizing: border-box;
+}
+
+body.mandarin-home-active.app-dark-theme .agency-letterbot-text {
+  background: #141210;
+  border-color: #3a332d;
+  color: #f3ece4;
+}
+
+body.mandarin-home-active .agency-letterbot-media-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+body.mandarin-home-active .agency-letterbot-media-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+body.mandarin-home-active .agency-letterbot-upload,
+body.mandarin-home-active .agency-letterbot-remove {
+  padding: 7px 12px;
+  border-radius: 9px;
+  border: 1px solid #ddd4cb;
+  background: #faf7f4;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+body.mandarin-home-active .agency-letterbot-remove {
+  border-color: transparent;
+  background: transparent;
+  color: #b85a43;
+}
+
+body.mandarin-home-active .agency-letterbot-preview {
+  max-width: 120px;
+  max-height: 80px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+body.mandarin-home-active .agency-letterbot-add {
+  align-self: flex-start;
+  padding: 10px 14px;
+  border: 1px dashed #c96f52;
+  border-radius: 10px;
+  background: transparent;
+  color: #c96f52;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+body.mandarin-home-active .agency-letterbot-empty {
+  padding: 24px;
+  text-align: center;
+  color: #8a7f76;
+  border: 1px dashed #ddd4cb;
+  border-radius: 12px;
+}
+
+body.mandarin-home-active .agency-letterbot-panel.is-locked #agencyLetterBotContent {
+  display: none !important;
 }

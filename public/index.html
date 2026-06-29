@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20260627-inbox-parent-frame-20">
+  <link rel="stylesheet" href="style.css?v=20260629-letterbot-1">
   <style>
     body.mandarin-home-active { min-height: 100vh !important; overflow: hidden !important; background: #0f1626 !important; }
     body.mandarin-home-active .app-layout,
@@ -758,18 +758,37 @@
         <div id="agencyChatFavoritesMount" class="agency-favorites-mount hidden"></div>
       </div>
     </section>
-    <section class="agency-coming-soon-panel hidden" data-agency-panel="letterbot" aria-label="LetterBot">
-      <div class="agency-coming-soon-card">
-        <span class="agency-coming-soon-icon agency-coming-soon-icon-letterbot" aria-hidden="true">
+    <section class="agency-letterbot-panel hidden" data-agency-panel="letterbot" aria-label="LetterBot">
+      <div id="agencyLetterBotNoAccess" class="agency-inbox-no-access hidden">
+        <div class="agency-inbox-no-access-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3.5 7.5h10.7a2.3 2.3 0 0 1 2.3 2.3v6.4a2.3 2.3 0 0 1-2.3 2.3H5.8a2.3 2.3 0 0 1-2.3-2.3V7.5Z"/>
             <path d="m4.5 8.5 5.3 4.2a1.8 1.8 0 0 0 2.3 0l5.3-4.2"/>
             <path d="M15.5 6.5 21 4.5l-2 5.5"/>
             <path d="M18.7 5.4 15 9.1"/>
           </svg>
-        </span>
-        <h2>LetterBot</h2>
-        <p>Coming soon</p>
+        </div>
+        <strong>LetterBot will be available after profile authorization.</strong>
+        <span>Connect a profile below to use automated Letter Sendout.</span>
+        <button id="agencyLetterBotAuthorizeBtn" class="agency-section-authorize-btn hidden" type="button">Connect profile</button>
+      </div>
+      <div id="agencyLetterBotContent" class="agency-letterbot-content hidden">
+        <div class="agency-letterbot-toolbar">
+          <label class="agency-letterbot-interval">
+            <span>Interval (minutes)</span>
+            <input id="agencyLetterBotInterval" type="number" min="5" max="240" step="1" value="20">
+          </label>
+          <div class="agency-letterbot-actions">
+            <button id="agencyLetterBotSaveBtn" class="agency-letterbot-btn" type="button">Save</button>
+            <button id="agencyLetterBotSendNowBtn" class="agency-letterbot-btn" type="button">Send now</button>
+            <button id="agencyLetterBotStartBtn" class="agency-letterbot-btn primary" type="button">Start</button>
+            <button id="agencyLetterBotStopBtn" class="agency-letterbot-btn danger" type="button">Stop</button>
+          </div>
+        </div>
+        <div id="agencyLetterBotStatus" class="agency-letterbot-status">Loading...</div>
+        <div id="agencyLetterBotCountdown" class="agency-letterbot-countdown"></div>
+        <div id="agencyLetterBotEntries" class="agency-letterbot-entries"></div>
+        <button id="agencyLetterBotAddEntry" class="agency-letterbot-add" type="button">+ Add letter</button>
       </div>
     </section>
     <section class="agency-coming-soon-panel hidden" data-agency-panel="sender" aria-label="Sender">
@@ -1328,7 +1347,8 @@
     </div>
   </div>
 </div>
-  <script src="app.js?v=20260627-inbox-parent-frame-20"></script>
+  <script src="letterbot.js?v=20260629-letterbot-1"></script>
+  <script src="app.js?v=20260629-letterbot-1"></script>
 </body>
 </html>
 
