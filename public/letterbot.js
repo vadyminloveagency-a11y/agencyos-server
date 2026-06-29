@@ -15,6 +15,7 @@
   const countdownEl = document.getElementById('agencyLetterBotCountdown');
   const intervalInput = document.getElementById('agencyLetterBotInterval');
   const entriesRoot = document.getElementById('agencyLetterBotEntries');
+  const controlsRoot = document.getElementById('agencyLetterBotControls');
   const saveBtn = document.getElementById('agencyLetterBotSaveBtn');
   const startBtn = document.getElementById('agencyLetterBotStartBtn');
   const stopBtn = document.getElementById('agencyLetterBotStopBtn');
@@ -24,7 +25,7 @@
   const previewBody = document.getElementById('agencyLetterBotPreviewBody');
   const previewCloseBtn = document.getElementById('agencyLetterBotPreviewClose');
 
-  const EXPECTED_BUILD = '20260629-7';
+  const EXPECTED_BUILD = '20260629-8';
 
   let letterBotState = null;
   let letterBotBuildId = '';
@@ -151,17 +152,20 @@
     const entryNode = entriesRoot?.querySelector('.agency-letterbot-entry');
     if (!entryNode) return;
     const id = entryNode.dataset.entryId || '';
-    const mediaType = entryNode.querySelector(`[data-entry-media="${id}"]:checked`)?.value || 'none';
-    const mediaBar = entryNode.querySelector('.agency-letterbot-media-bar');
-    const hasMedia = Boolean(entryNode.querySelector('.agency-letterbot-preview'));
+    const mediaType = controlsRoot?.querySelector(`[data-entry-media="${id}"]:checked`)?.value
+      || entryNode.querySelector(`[data-entry-media="${id}"]:checked`)?.value
+      || 'none';
+    const mediaBar = controlsRoot?.querySelector('.agency-letterbot-media-bar')
+      || entryNode.querySelector('.agency-letterbot-media-bar');
+    const hasMedia = Boolean(controlsRoot?.querySelector('.agency-letterbot-preview') || entryNode.querySelector('.agency-letterbot-preview'));
     if (mediaBar) {
       mediaBar.classList.toggle('is-active', Boolean(mediaType) || hasMedia);
     }
-    entryNode.querySelectorAll('.agency-letterbot-media-chip').forEach(chip => {
+    (controlsRoot || entryNode).querySelectorAll('.agency-letterbot-media-chip').forEach(chip => {
       const input = chip.querySelector('input[type="radio"]');
       chip.classList.toggle('is-selected', Boolean(input?.checked));
     });
-    const uploadBtn = entryNode.querySelector('[data-entry-upload]');
+    const uploadBtn = (controlsRoot || entryNode).querySelector('[data-entry-upload]');
     if (uploadBtn) uploadBtn.classList.toggle('is-selected', hasMedia);
   }
 
@@ -263,12 +267,13 @@
     const entryNode = entriesRoot?.querySelector('.agency-letterbot-entry');
     if (!entryNode) return;
     const id = entryNode.dataset.entryId || '';
+    const mediaRoot = controlsRoot || entryNode;
 
-    entryNode.querySelectorAll(`[data-entry-media="${id}"]`).forEach(input => {
+    mediaRoot.querySelectorAll(`[data-entry-media="${id}"]`).forEach(input => {
       input.addEventListener('change', syncMediaBarGlow);
     });
 
-    entryNode.querySelectorAll('[data-preview-open]').forEach(node => {
+    mediaRoot.querySelectorAll('[data-preview-open]').forEach(node => {
       node.addEventListener('click', event => {
         if (event.target.closest('[data-entry-upload]')) return;
         openPreviewModal();
@@ -285,6 +290,32 @@
     syncMediaBarGlow();
   }
 
+  function renderLetterBotControls(entry) {
+    if (!controlsRoot) return;
+    controlsRoot.innerHTML = `
+      <div class="agency-letterbot-media-bar is-active" data-preview-open>
+        <label class="agency-letterbot-media-chip ${entry.mediaType === 'none' ? 'is-selected' : ''}">
+          <input type="radio" name="media-${escapeHtml(entry.id)}" value="none" data-entry-media="${escapeHtml(entry.id)}" ${entry.mediaType === 'none' ? 'checked' : ''}>
+          <span>Text only</span>
+        </label>
+        <label class="agency-letterbot-media-chip ${entry.mediaType === 'photo' ? 'is-selected' : ''}">
+          <input type="radio" name="media-${escapeHtml(entry.id)}" value="photo" data-entry-media="${escapeHtml(entry.id)}" ${entry.mediaType === 'photo' ? 'checked' : ''}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg>
+          <span>Photo</span>
+        </label>
+        <label class="agency-letterbot-media-chip ${entry.mediaType === 'video' ? 'is-selected' : ''}">
+          <input type="radio" name="media-${escapeHtml(entry.id)}" value="video" data-entry-media="${escapeHtml(entry.id)}" ${entry.mediaType === 'video' ? 'checked' : ''}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="6" width="14" height="12" rx="2"/><path d="M17 10l4-2v8l-4-2"/></svg>
+          <span>Video</span>
+        </label>
+        <input type="file" class="agency-letterbot-file hidden" data-entry-file="${escapeHtml(entry.id)}" accept="${entry.mediaType === 'video' ? 'video/mp4' : 'image/jpeg,image/png,image/webp'}">
+        <button type="button" class="agency-letterbot-upload ${entry.hasMedia ? 'is-selected' : ''}" data-entry-upload="${escapeHtml(entry.id)}">${entry.hasMedia ? escapeHtml(entry.mediaName || 'Change file') : 'Choose file'}</button>
+        ${entry.hasMedia && entry.mediaType === 'photo' && entry.mediaUrl ? `<button type="button" class="agency-letterbot-preview-btn" data-preview-open><img class="agency-letterbot-preview" src="${escapeHtml(entry.mediaUrl)}" alt=""></button>` : ''}
+        ${entry.hasMedia && entry.mediaType === 'video' && entry.mediaUrl ? `<button type="button" class="agency-letterbot-preview-btn" data-preview-open><video class="agency-letterbot-preview" src="${escapeHtml(entry.mediaUrl)}" muted></video></button>` : ''}
+      </div>
+    `;
+  }
+
   function renderLetterBotEntries() {
     if (!entriesRoot) return;
     const entry = ensureSingleLetterEntry();
@@ -294,28 +325,9 @@
           <div class="agency-letterbot-text-highlight" data-entry-highlight="${escapeHtml(entry.id)}" aria-hidden="true"></div>
           <textarea class="agency-letterbot-text" data-entry-text="${escapeHtml(entry.id)}" placeholder="Write your mailing message here...">${escapeHtml(entry.text || '')}</textarea>
         </div>
-        <div class="agency-letterbot-media-bar is-active" data-preview-open>
-          <label class="agency-letterbot-media-chip ${entry.mediaType === 'none' ? 'is-selected' : ''}">
-            <input type="radio" name="media-${escapeHtml(entry.id)}" value="none" data-entry-media="${escapeHtml(entry.id)}" ${entry.mediaType === 'none' ? 'checked' : ''}>
-            <span>Text only</span>
-          </label>
-          <label class="agency-letterbot-media-chip ${entry.mediaType === 'photo' ? 'is-selected' : ''}">
-            <input type="radio" name="media-${escapeHtml(entry.id)}" value="photo" data-entry-media="${escapeHtml(entry.id)}" ${entry.mediaType === 'photo' ? 'checked' : ''}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg>
-            <span>Photo</span>
-          </label>
-          <label class="agency-letterbot-media-chip ${entry.mediaType === 'video' ? 'is-selected' : ''}">
-            <input type="radio" name="media-${escapeHtml(entry.id)}" value="video" data-entry-media="${escapeHtml(entry.id)}" ${entry.mediaType === 'video' ? 'checked' : ''}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="6" width="14" height="12" rx="2"/><path d="M17 10l4-2v8l-4-2"/></svg>
-            <span>Video</span>
-          </label>
-          <input type="file" class="agency-letterbot-file hidden" data-entry-file="${escapeHtml(entry.id)}" accept="${entry.mediaType === 'video' ? 'video/mp4' : 'image/jpeg,image/png,image/webp'}">
-          <button type="button" class="agency-letterbot-upload ${entry.hasMedia ? 'is-selected' : ''}" data-entry-upload="${escapeHtml(entry.id)}">${entry.hasMedia ? escapeHtml(entry.mediaName || 'Change file') : 'Choose file'}</button>
-          ${entry.hasMedia && entry.mediaType === 'photo' && entry.mediaUrl ? `<button type="button" class="agency-letterbot-preview-btn" data-preview-open><img class="agency-letterbot-preview" src="${escapeHtml(entry.mediaUrl)}" alt=""></button>` : ''}
-          ${entry.hasMedia && entry.mediaType === 'video' && entry.mediaUrl ? `<button type="button" class="agency-letterbot-preview-btn" data-preview-open><video class="agency-letterbot-preview" src="${escapeHtml(entry.mediaUrl)}" muted></video></button>` : ''}
-        </div>
       </article>
     `;
+    renderLetterBotControls(entry);
     wireEntryInteractions();
   }
 
@@ -324,7 +336,7 @@
     if (!node) return [];
     const id = node.dataset.entryId || '';
     const text = node.querySelector(`[data-entry-text="${id}"]`)?.value || '';
-    const mediaType = node.querySelector(`[data-entry-media="${id}"]:checked`)?.value || 'none';
+    const mediaType = (controlsRoot || node).querySelector(`[data-entry-media="${id}"]:checked`)?.value || 'none';
     const existing = (letterBotState?.entries || []).find(item => item.id === id);
     return [{
       id,
@@ -441,17 +453,17 @@
     await loadLetterBotPanel();
   }
 
-  entriesRoot?.addEventListener('click', async event => {
+  controlsRoot?.addEventListener('click', async event => {
     const uploadBtn = event.target.closest('[data-entry-upload]');
     if (uploadBtn) {
       event.stopPropagation();
       const id = uploadBtn.dataset.entryUpload || '';
-      const mediaType = entriesRoot.querySelector(`[data-entry-media="${id}"]:checked`)?.value || 'none';
+      const mediaType = controlsRoot.querySelector(`[data-entry-media="${id}"]:checked`)?.value || 'none';
       if (mediaType === 'none') {
         alert('Choose Photo or Video first');
         return;
       }
-      const input = entriesRoot.querySelector(`[data-entry-file="${id}"]`);
+      const input = controlsRoot.querySelector(`[data-entry-file="${id}"]`);
       if (!input) return;
       input.accept = mediaType === 'video' ? 'video/mp4' : 'image/jpeg,image/png,image/webp';
       input.onchange = async () => {

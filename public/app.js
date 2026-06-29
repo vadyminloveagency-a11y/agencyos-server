@@ -2552,11 +2552,13 @@ async function connectProfileById(profileId, options = {}) {
     notifyWorkspaceProfileConnected(id, { reason: 'connect' });
     const noReplyCount = agencyPendingLetterCount(result?.letters || []);
     setAgencyProfilePendingCount(id, noReplyCount, { playSound: options.playSound !== false });
-    loadProfilePendingCount(id, {
-      scan: true,
-      maxPages: options.maxPages || 3,
-      playSound: options.playSound !== false
-    }).catch(() => {});
+    if (options.syncInbox === false) {
+      loadProfilePendingCount(id, {
+        scan: true,
+        maxPages: options.maxPages || 3,
+        playSound: options.playSound !== false
+      }).catch(() => {});
+    }
     return result;
   } finally {
     profileConnectingIds.delete(id);
@@ -9057,7 +9059,6 @@ async function connectSelectedLady() {
     });
     const noReplyCount = agencyPendingLetterCount(result?.letters || []);
     setAgencyProfilePendingCount(activeProfileId, noReplyCount, { playSound: true });
-    loadProfilePendingCount(activeProfileId, { scan: true, maxPages: 3, playSound: true }).catch(() => {});
     await prepareLocalDreamProfile(activeProfileId);
     ladyConnected = true;
     localStorage.setItem(`dream_team_lady_connected_${activeProfileId}`, '1');

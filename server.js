@@ -6344,7 +6344,11 @@ app.post('/api/profiles/:id/server-connect', requireUser, async (req, res) => {
     let browserWarning = '';
     if (req.body?.keepOnline !== false) {
       try {
-        await startDreamBrowser(db, req.user, id, { force: req.body?.forceBrowser === true });
+        await startDreamBrowser(db, req.user, id, {
+          force: req.body?.forceBrowser === true,
+          skipDreamSessionSeed: true,
+          seedCookies: dreamCookiesForBrowser(session.jar)
+        });
       } catch (error) {
         browserWarning = error.message || 'Dream browser did not start';
       }

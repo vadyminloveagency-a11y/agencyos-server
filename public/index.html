@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20260629-7">
+  <link rel="stylesheet" href="style.css?v=20260629-8">
   <style>
     body.mandarin-home-active { min-height: 100vh !important; overflow: hidden !important; background: #0f1626 !important; }
     body.mandarin-home-active .app-layout,
@@ -786,12 +786,16 @@
               </label>
             </header>
 
-            <section class="agency-letterbot-compose-card">
+            <section class="agency-letterbot-letter-card">
               <div class="agency-letterbot-compose-head">
                 <span class="agency-letterbot-compose-label">NEW MAILING</span>
                 <button id="agencyLetterBotClearBtn" class="agency-letterbot-clear-btn" type="button">Delete letter</button>
               </div>
               <div id="agencyLetterBotEntries" class="agency-letterbot-entries"></div>
+            </section>
+
+            <section class="agency-letterbot-controls-card">
+              <div id="agencyLetterBotControls" class="agency-letterbot-controls-body"></div>
               <div class="agency-letterbot-compose-footer">
                 <div class="agency-letterbot-compose-tools">
                   <button id="agencyLetterBotSaveBtn" class="agency-letterbot-tool-btn" type="button">Save</button>
@@ -1431,8 +1435,8 @@
     </div>
   </div>
 </div>
-  <script src="letterbot.js?v=20260629-7"></script>
-  <script src="app.js?v=20260629-7"></script>
+  <script src="letterbot.js?v=20260629-8"></script>
+  <script src="app.js?v=20260629-8"></script>
 </body>
 </html>
 
