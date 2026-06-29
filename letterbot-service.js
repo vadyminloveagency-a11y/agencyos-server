@@ -8,7 +8,7 @@ const LETTERBOT_DEFAULT_AUDIENCE = 'online';
 const LETTERBOT_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const LETTERBOT_MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const LETTERBOT_SEND_TICK_MS = 10_000;
-const LETTERBOT_BUILD_ID = '20260629-2';
+const LETTERBOT_BUILD_ID = '20260629-3';
 const letterBotRunsInFlight = new Map();
 const letterBotSendLoops = new Map();
 
@@ -43,12 +43,13 @@ function normalizeLetterBotConfig(raw) {
       mediaFile: String(item?.mediaFile || '')
     })).filter(item => item.text.trim() || item.mediaType !== 'none')
     : [];
+  const singleEntry = singleLetterBotEntry(entries);
   return {
     ...base,
     enabled: raw.enabled === true,
     intervalMinutes: Math.min(240, Math.max(5, Number(raw.intervalMinutes) || 20)),
     audienceFilter: String(raw.audienceFilter || LETTERBOT_DEFAULT_AUDIENCE),
-    queueIndex: Math.max(0, Number(raw.queueIndex) || 0),
+    queueIndex: 0,
     lastRunAt: String(raw.lastRunAt || ''),
     lastTemplateAt: String(raw.lastTemplateAt || ''),
     lastSuccessAt: String(raw.lastSuccessAt || ''),
@@ -57,7 +58,7 @@ function normalizeLetterBotConfig(raw) {
     menSentSession: Math.max(0, Number(raw.menSentSession) || 0),
     menSentToday: Math.max(0, Number(raw.menSentToday) || 0),
     menSentDay: String(raw.menSentDay || ''),
-    entries
+    entries: singleEntry ? [singleEntry] : []
   };
 }
 
@@ -172,12 +173,18 @@ function resetLetterBotSessionCounters(config) {
   return config;
 }
 
+function singleLetterBotEntry(entries) {
+  const list = Array.isArray(entries) ? entries : [];
+  const usable = list.filter(item => String(item?.text || '').trim() || item?.mediaType !== 'none');
+  if (usable.length) return usable[0];
+  if (list.length) return list[0];
+  return null;
+}
+
 function pickLetterBotEntry(config) {
-  const entries = (config.entries || []).filter(item => String(item.text || '').trim());
-  if (!entries.length) return null;
-  const index = config.queueIndex % entries.length;
-  const entry = entries[index];
-  return { entry, index, total: entries.length };
+  const entry = singleLetterBotEntry(config.entries);
+  if (!entry || !String(entry.text || '').trim()) return null;
+  return { entry, index: 0, total: 1 };
 }
 
 function markLetterBotTemplateRun(profile, success = true) {
@@ -187,8 +194,7 @@ function markLetterBotTemplateRun(profile, success = true) {
   config.lastTemplateAt = now.toISOString();
   if (success) {
     config.lastError = '';
-    const picked = pickLetterBotEntry(config);
-    if (picked) config.queueIndex = (picked.index + 1) % picked.total;
+    config.queueIndex = 0;
   }
   const next = new Date(now.getTime() + config.intervalMinutes * 60_000);
   config.nextRunAt = next.toISOString();
@@ -677,7 +683,7 @@ function registerLetterBotRoutes(app, deps) {
     try {
       const profile = requireProfileForUser(db, req.user, id);
       const current = normalizeLetterBotConfig(profile.letterBot);
-      const incomingEntries = Array.isArray(req.body?.entries) ? req.body.entries : current.entries;
+      const incomingEntries = (Array.isArray(req.body?.entries) ? req.body.entries : current.entries).slice(0, 1);
       const entries = incomingEntries.map(item => {
         const entryId = String(item?.id || crypto.randomUUID());
         const existing = current.entries.find(row => row.id === entryId);
@@ -700,11 +706,15 @@ function registerLetterBotRoutes(app, deps) {
         }
         return next;
       }).filter(item => item.text.trim() || item.mediaType !== 'none');
-      profile.letterBot = {
+      const keptId = entries[0]?.id || '';
+      for (const old of current.entries) {
+        if (keptId && old.id !== keptId && old.mediaFile) deleteLetterBotMedia(letterBotMediaRoot, old);
+      }
+      profile.letterBot = normalizeLetterBotConfig({
         ...current,
         intervalMinutes: Math.min(240, Math.max(5, Number(req.body?.intervalMinutes) || current.intervalMinutes || 20)),
         entries
-      };
+      });
       profile.updatedAt = new Date().toISOString();
       writeDb(db);
       res.json({ ok: true, letterbot: publicLetterBotConfig(profile, id, letterBotMediaRoot) });

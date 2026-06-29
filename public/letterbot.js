@@ -11,7 +11,6 @@
   const countdownEl = document.getElementById('agencyLetterBotCountdown');
   const intervalInput = document.getElementById('agencyLetterBotInterval');
   const entriesRoot = document.getElementById('agencyLetterBotEntries');
-  const addBtn = document.getElementById('agencyLetterBotAddEntry');
   const saveBtn = document.getElementById('agencyLetterBotSaveBtn');
   const startBtn = document.getElementById('agencyLetterBotStartBtn');
   const stopBtn = document.getElementById('agencyLetterBotStopBtn');
@@ -73,11 +72,11 @@
       sentCountEl.textContent = `Men processed: ${session} (session) · ${today} (today)`;
     }
     if (countdownEl) countdownEl.textContent = letterBotState.enabled
-      ? `Sending every ~10 sec · Next template: ${formatCountdown(letterBotState.nextRunAt)}`
+      ? `Same letter to online men · ~10 sec · template refresh: ${formatCountdown(letterBotState.nextRunAt)}`
       : 'LetterBot is stopped';
     if (buildEl) {
       const build = letterBotState.buildId || letterBotBuildId || '';
-      const stale = build !== '20260629-2';
+      const stale = build !== '20260629-3';
       buildEl.textContent = stale
         ? `Build ${build || 'old'} · update pending — redeploy Render and hard-refresh (Ctrl+Shift+R)`
         : `Build ${build}`;
@@ -140,18 +139,29 @@
     });
   }
 
+  function ensureSingleLetterEntry() {
+    const entries = Array.isArray(letterBotState?.entries) ? letterBotState.entries.slice(0, 1) : [];
+    if (!entries.length) {
+      entries.push({
+        id: crypto.randomUUID(),
+        text: '',
+        mediaType: 'none',
+        mediaName: '',
+        hasMedia: false,
+        mediaUrl: ''
+      });
+    }
+    letterBotState = { ...(letterBotState || {}), entries };
+    return entries[0];
+  }
+
   function renderLetterBotEntries() {
     if (!entriesRoot) return;
-    const entries = Array.isArray(letterBotState?.entries) ? letterBotState.entries : [];
-    if (!entries.length) {
-      entriesRoot.innerHTML = '<div class="agency-letterbot-empty">Add your first letter template below.</div>';
-      return;
-    }
-    entriesRoot.innerHTML = entries.map((entry, index) => `
+    const entry = ensureSingleLetterEntry();
+    entriesRoot.innerHTML = `
       <article class="agency-letterbot-entry" data-entry-id="${escapeHtml(entry.id)}">
         <div class="agency-letterbot-entry-head">
-          <strong>Letter ${index + 1}</strong>
-          <button type="button" class="agency-letterbot-remove" data-remove-entry="${escapeHtml(entry.id)}">Remove</button>
+          <strong>Letter</strong>
         </div>
         <textarea class="agency-letterbot-text" data-entry-text="${escapeHtml(entry.id)}" rows="5" placeholder="Letter text for Dream Letter Sendout Tool">${escapeHtml(entry.text || '')}</textarea>
         <div class="agency-letterbot-media-row">
@@ -173,27 +183,25 @@
           ${entry.hasMedia && entry.mediaType === 'video' && entry.mediaUrl ? `<video class="agency-letterbot-preview" src="${escapeHtml(entry.mediaUrl)}" controls></video>` : ''}
         </div>
       </article>
-    `).join('');
+    `;
   }
 
   function collectEntriesFromDom() {
-    const entries = [];
-    entriesRoot?.querySelectorAll('.agency-letterbot-entry').forEach(node => {
-      const id = node.dataset.entryId || '';
-      const text = node.querySelector(`[data-entry-text="${id}"]`)?.value || '';
-      const mediaType = node.querySelector(`[data-entry-media="${id}"]:checked`)?.value || 'none';
-      const existing = (letterBotState?.entries || []).find(item => item.id === id);
-      entries.push({
-        id,
-        text,
-        mediaType,
-        mediaName: existing?.mediaName || '',
-        mediaMime: existing?.mediaMime || '',
-        hasMedia: existing?.hasMedia || false,
-        mediaUrl: existing?.mediaUrl || ''
-      });
-    });
-    return entries;
+    const node = entriesRoot?.querySelector('.agency-letterbot-entry');
+    if (!node) return [];
+    const id = node.dataset.entryId || '';
+    const text = node.querySelector(`[data-entry-text="${id}"]`)?.value || '';
+    const mediaType = node.querySelector(`[data-entry-media="${id}"]:checked`)?.value || 'none';
+    const existing = (letterBotState?.entries || []).find(item => item.id === id);
+    return [{
+      id,
+      text,
+      mediaType,
+      mediaName: existing?.mediaName || '',
+      mediaMime: existing?.mediaMime || '',
+      hasMedia: existing?.hasMedia || false,
+      mediaUrl: existing?.mediaUrl || ''
+    }];
   }
 
   async function apiLetterBot(method, suffix = '', body = null) {
@@ -286,36 +294,7 @@
     await loadLetterBotPanel();
   }
 
-  function addEntry() {
-    const entries = collectEntriesFromDom();
-    entries.push({
-      id: crypto.randomUUID(),
-      text: '',
-      mediaType: 'none',
-      mediaName: '',
-      hasMedia: false,
-      mediaUrl: ''
-    });
-    letterBotState = { ...(letterBotState || {}), entries };
-    renderLetterBotEntries();
-  }
-
   entriesRoot?.addEventListener('click', async event => {
-    const removeBtn = event.target.closest('[data-remove-entry]');
-    if (removeBtn) {
-      const id = removeBtn.dataset.removeEntry || '';
-      const entries = collectEntriesFromDom().filter(entry => entry.id !== id);
-      letterBotState = { ...(letterBotState || {}), entries };
-      await apiLetterBot('PUT', '', {
-        intervalMinutes: Number(intervalInput?.value || 20) || 20,
-        entries
-      }).catch(() => {});
-      if (id) {
-        await fetch(`/api/profiles/${encodeURIComponent(activeProfileId())}/letterbot/media/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
-      }
-      await loadLetterBotPanel();
-      return;
-    }
     const uploadBtn = event.target.closest('[data-entry-upload]');
     if (uploadBtn) {
       const id = uploadBtn.dataset.entryUpload || '';
@@ -345,7 +324,6 @@
     }
   });
 
-  addBtn?.addEventListener('click', addEntry);
   saveBtn?.addEventListener('click', () => {
     saveBtn.disabled = true;
     saveLetterBotConfig()
