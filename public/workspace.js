@@ -3238,15 +3238,17 @@ function renderAttachments(attachments = [], letter = {}) {
         ${typedAttachments.map((item, index) => {
           const isVideo = item.kind === 'video';
           const label = item.label || (item.kind === 'video' ? 'Video' : (item.kind === 'photo' ? 'Photo' : 'File'));
-          if (item.live || letter?.messageLink || letter?.sourceUrl) {
+          if (item.live && !item.url) {
+            const liveKind = item.type === 'video' || isVideo ? 'video' : 'image';
             return `<figure class="workspace-attachment-preview live">
                 <div class="workspace-live-attachment-slot"
-                  data-live-attachment-kind="${escapeAttr(isVideo ? 'video' : 'image')}"
+                  data-live-attachment-kind="${escapeAttr(liveKind)}"
                   data-live-attachment-url="${escapeAttr(letter?.messageLink || letter?.sourceUrl || '')}">
                   ${loadingDots}
                 </div>
               </figure>`;
           }
+          if (!item.url) return '';
           const directVideo = isVideo && /\.(?:mp4|webm|mov|m4v)(?:[?#]|$)/i.test(item.url);
           const fallbackAttr = item.sourceUrl && item.sourceUrl !== item.url
             ? ` data-fallback-src="${escapeAttr(item.sourceUrl)}"`

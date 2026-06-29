@@ -619,6 +619,14 @@ function workspaceLiveAttachmentMarkers(attachments = [], fallback = {}) {
   return markers;
 }
 
+function mergeWorkspaceLetterAttachments(incoming = [], saved = [], fallback = {}) {
+  const incomingClean = cleanWorkspaceAttachments(incoming);
+  if (incomingClean.length) return incomingClean;
+  const savedClean = cleanWorkspaceAttachments(saved);
+  if (savedClean.length) return savedClean;
+  return workspaceLiveAttachmentMarkers(incoming, fallback);
+}
+
 function removeWorkspaceAttachmentCacheForProfile(profileId = '') {
   const cleanProfileId = String(profileId || '').replace(/[^\w-]/g, '_');
   if (!cleanProfileId) return 0;
@@ -6788,7 +6796,7 @@ app.post('/api/workspace/read-letter', async (req, res) => {
     if (!letter.bodyText && !letter.conversation?.length && !letter.attachments?.length) {
       throw new Error('Could not read letter text');
     }
-    letter.attachments = workspaceLiveAttachmentMarkers(letter.attachments || [], savedLetter || {});
+    letter.attachments = mergeWorkspaceLetterAttachments(letter.attachments || [], savedLetter?.attachments || [], savedLetter || letter);
     res.json({ ok: true, letter: { ...letter, messageLink: rawUrl } });
   } catch (error) {
     const fallbackDb = readDb();
@@ -6800,7 +6808,7 @@ app.post('/api/workspace/read-letter', async (req, res) => {
       attachments: [],
       conversation: []
     }, savedLetter);
-    fallbackLetter.attachments = workspaceLiveAttachmentMarkers([], savedLetter || fallbackLetter);
+    fallbackLetter.attachments = mergeWorkspaceLetterAttachments([], savedLetter?.attachments || [], savedLetter || fallbackLetter);
     if (fallbackLetter.bodyText || fallbackLetter.conversation?.length || fallbackLetter.attachments?.length) {
       return res.json({ ok: true, letter: { ...fallbackLetter, messageLink: rawUrl, liveError: error.message || '' } });
     }
@@ -7402,11 +7410,11 @@ app.post('/api/workspace/letter', async (req, res) => {
   const nextDateText = hasWorkspaceClock(incomingDateText)
     ? incomingDateText
     : (hasWorkspaceClock(currentDateText) ? currentDateText : (dateFromWorkspaceKey(key) || incomingDateText || currentDateText));
-  const incomingAttachments = cleanWorkspaceAttachments(incoming.attachments || []);
-  const savedAttachments = cleanWorkspaceAttachments(letters[index].attachments || []);
-  const attachments = incomingAttachments.length
-    ? incomingAttachments
-    : (savedAttachments.length ? savedAttachments : workspaceLiveAttachmentMarkers([], letters[index]));
+  const attachments = mergeWorkspaceLetterAttachments(
+    incoming.attachments || [],
+    letters[index].attachments || [],
+    letters[index]
+  );
   const conversation = Array.isArray(incoming.conversation)
     ? incoming.conversation.map(item => ({
         direction: String(item?.direction || 'incoming').slice(0, 20),
