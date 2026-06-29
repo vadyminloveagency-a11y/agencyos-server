@@ -21,7 +21,8 @@ let profilePendingCountsTimer = null;
 const AGENCY_PANEL_KEY = 'agencyos_active_panel';
 const AGENCY_ACCOUNT_TAB_KEY = 'agencyos_account_tab';
 const REMEMBER_ACCESS_KEY = 'agencyos_remember_access';
-const AGENCY_DESKTOP_CLIENT = Boolean(window.agencyElectron);
+const AGENCY_ELECTRON_SHELL = /Electron/i.test(navigator.userAgent || '');
+const AGENCY_DESKTOP_CLIENT = AGENCY_ELECTRON_SHELL || Boolean(window.agencyElectron);
 const AGENCY_DESKTOP_SESSION_KEY = 'agencyos_desktop_session_id';
 if (AGENCY_DESKTOP_CLIENT) {
   const desktopSessionId = new URLSearchParams(window.location.search).get('desktopVersion') || 'desktop';
@@ -78,6 +79,12 @@ async function checkAgencyServerCapabilities() {
   } catch {}
 }
 checkAgencyServerCapabilities();
+
+if (AGENCY_ELECTRON_SHELL && !window.agencyElectron) {
+  window.setTimeout(() => {
+    alert('AgencyOS Desktop запустился без связи с программой. Переустановите AgencyOS-Setup-0.2.0.exe и перезапустите.');
+  }, 1200);
+}
 
 if (!ladyConnected && !['stats', 'adminPanel', 'settings'].includes(currentView)) {
   currentView = 'mandarinHome';
@@ -164,8 +171,8 @@ function installAgencyRuntimeStyles() {
   style.id = 'agencyRuntimeStyles';
   style.textContent = `
     body.mandarin-home-active { margin:0!important; min-height:100vh!important; overflow:hidden!important; background:#151311!important; }
-    body.agency-desktop-app.mandarin-home-active .agency-shell-nav-item[data-agency-view="account-manager"],
-    body.agency-desktop-app.mandarin-home-active .agency-account-manager[data-agency-panel="account-manager"] { display:none!important; }
+    body.agency-desktop-app:not(.desktop-admin-user).mandarin-home-active .agency-shell-nav-item[data-agency-view="account-manager"],
+    body.agency-desktop-app:not(.desktop-admin-user).mandarin-home-active .agency-account-manager[data-agency-panel="account-manager"] { display:none!important; }
     body.web-admin-user.mandarin-home-active .agency-shell-nav-item[data-director-hidden="true"],
     body.web-admin-user.mandarin-home-active #sidebarProfileDock,
     body.web-admin-user.mandarin-home-active .agency-shell-working-lady { display:none!important; }
@@ -7435,7 +7442,7 @@ let setupMode = false;
 
 function normalizeAgencyPanel(view) {
   const panel = ['home', 'account-manager', 'dashboard', 'inbox', 'favorites', 'letterbot', 'sender'].includes(view) ? view : 'account-manager';
-  if (isAgencyDesktopApp() && panel === 'account-manager') {
+  if (isAgencyDesktopApp() && !isDesktopAdminSession() && panel === 'account-manager') {
     return 'dashboard';
   }
   if ((currentUser?.role === 'director' || isWebsiteAdminSession()) && ['inbox', 'favorites', 'letterbot', 'sender'].includes(panel)) {
@@ -7817,7 +7824,7 @@ function showMandarinHome(options = {}) {
     }
     activateAgencyPanel(restoredPanel, { persist: false });
   }
-  if (isAgencyWebsite()) {
+  if (isAgencyWebsite() || isDesktopAdminSession()) {
     loadAgencyAccountManager().catch(error => {
       if (agencyAccountStatus) agencyAccountStatus.textContent = error.message || 'Could not load profiles';
     });

@@ -23901,8 +23901,8 @@ body.mandarin-home-active.app-dark-theme .agency-reload-overlay {
   color: #f5eee9;
 }
 
-body.agency-desktop-app .agency-shell-nav-item[data-agency-view="account-manager"],
-body.agency-desktop-app .agency-account-manager[data-agency-panel="account-manager"] {
+body.agency-desktop-app:not(.desktop-admin-user) .agency-shell-nav-item[data-agency-view="account-manager"],
+body.agency-desktop-app:not(.desktop-admin-user) .agency-account-manager[data-agency-panel="account-manager"] {
   display: none !important;
 }
 
