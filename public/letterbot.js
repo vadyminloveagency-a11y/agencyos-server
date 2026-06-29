@@ -5,8 +5,12 @@
   const noAccess = document.getElementById('agencyLetterBotNoAccess');
   const content = document.getElementById('agencyLetterBotContent');
   const authorizeBtn = document.getElementById('agencyLetterBotAuthorizeBtn');
-  const statusEl = document.getElementById('agencyLetterBotStatus');
-  const sentCountEl = document.getElementById('agencyLetterBotSentCount');
+  const sideStatusEl = document.getElementById('agencyLetterBotSideStatus');
+  const sideStatusTextEl = document.getElementById('agencyLetterBotSideStatusText');
+  const sideStartedEl = document.getElementById('agencyLetterBotSideStarted');
+  const statTodayEl = document.getElementById('agencyLetterBotStatToday');
+  const statSessionEl = document.getElementById('agencyLetterBotStatSession');
+  const errorEl = document.getElementById('agencyLetterBotError');
   const buildEl = document.getElementById('agencyLetterBotBuild');
   const countdownEl = document.getElementById('agencyLetterBotCountdown');
   const intervalInput = document.getElementById('agencyLetterBotInterval');
@@ -15,6 +19,8 @@
   const startBtn = document.getElementById('agencyLetterBotStartBtn');
   const stopBtn = document.getElementById('agencyLetterBotStopBtn');
   const sendNowBtn = document.getElementById('agencyLetterBotSendNowBtn');
+
+  const EXPECTED_BUILD = '20260629-4';
 
   let letterBotState = null;
   let letterBotBuildId = '';
@@ -50,40 +56,76 @@
   function formatCountdown(iso) {
     if (!iso) return '—';
     const ms = new Date(iso).getTime() - Date.now();
-    if (ms <= 0) return 'Sending soon...';
+    if (ms <= 0) return 'soon';
     const totalSec = Math.ceil(ms / 1000);
     const min = Math.floor(totalSec / 60);
     const sec = totalSec % 60;
     return `${min}:${String(sec).padStart(2, '0')}`;
   }
 
+  function formatStartedAt(iso) {
+    if (!iso) return '—';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
   function updateLetterBotStatus() {
     if (!letterBotState) return;
-    const parts = [];
-    if (letterBotState.enabled) parts.push('Running');
-    else parts.push('Stopped');
-    if (letterBotState.lastSuccessAt) parts.push(`Last sent: ${new Date(letterBotState.lastSuccessAt).toLocaleString()}`);
-    else if (letterBotState.lastTemplateAt) parts.push(`Template saved: ${new Date(letterBotState.lastTemplateAt).toLocaleString()}`);
-    if (letterBotState.lastError) parts.push(`Error: ${letterBotState.lastError}`);
-    if (statusEl) statusEl.textContent = parts.join(' · ');
-    if (sentCountEl) {
-      const session = Number(letterBotState.menSentSession) || 0;
-      const today = Number(letterBotState.menSentToday) || 0;
-      sentCountEl.textContent = `Men processed: ${session} (session) · ${today} (today)`;
+
+    const running = letterBotState.enabled === true;
+    const session = Number(letterBotState.menSentSession) || 0;
+    const today = Number(letterBotState.menSentToday) || 0;
+
+    if (sideStatusEl && sideStatusTextEl) {
+      sideStatusEl.classList.remove('is-running', 'is-stopped', 'is-finished', 'is-error');
+      if (letterBotState.lastError && !running) {
+        sideStatusEl.classList.add('is-error');
+        sideStatusTextEl.textContent = 'Error';
+      } else if (running) {
+        sideStatusEl.classList.add('is-running');
+        sideStatusTextEl.textContent = 'Running';
+      } else if (session > 0) {
+        sideStatusEl.classList.add('is-finished');
+        sideStatusTextEl.textContent = 'Finished';
+      } else {
+        sideStatusEl.classList.add('is-stopped');
+        sideStatusTextEl.textContent = 'Stopped';
+      }
     }
-    if (countdownEl) countdownEl.textContent = letterBotState.enabled
-      ? `Same letter to online men · ~10 sec · template refresh: ${formatCountdown(letterBotState.nextRunAt)}`
-      : 'LetterBot is stopped';
+
+    if (sideStartedEl) {
+      sideStartedEl.textContent = running || letterBotState.sessionStartedAt
+        ? formatStartedAt(letterBotState.sessionStartedAt)
+        : '—';
+    }
+
+    if (statTodayEl) statTodayEl.textContent = String(today);
+    if (statSessionEl) statSessionEl.textContent = String(session);
+
+    if (countdownEl) {
+      countdownEl.textContent = running
+        ? `~10 sec between sends · template refresh in ${formatCountdown(letterBotState.nextRunAt)}`
+        : 'Press Start mailing to send this letter to online men';
+    }
+
+    if (errorEl) {
+      const message = String(letterBotState.lastError || '').trim();
+      errorEl.textContent = message;
+      errorEl.classList.toggle('hidden', !message);
+    }
+
     if (buildEl) {
       const build = letterBotState.buildId || letterBotBuildId || '';
-      const stale = build !== '20260629-3';
+      const stale = build !== EXPECTED_BUILD;
       buildEl.textContent = stale
-        ? `Build ${build || 'old'} · update pending — redeploy Render and hard-refresh (Ctrl+Shift+R)`
+        ? `Build ${build || 'old'} · redeploy Render and hard-refresh (Ctrl+Shift+R)`
         : `Build ${build}`;
       buildEl.classList.toggle('is-stale', stale);
     }
-    if (startBtn) startBtn.disabled = letterBotState.enabled;
-    if (stopBtn) stopBtn.disabled = !letterBotState.enabled;
+
+    if (startBtn) startBtn.disabled = running;
+    if (stopBtn) stopBtn.disabled = !running;
   }
 
   function startCountdownTimer() {
@@ -160,22 +202,21 @@
     const entry = ensureSingleLetterEntry();
     entriesRoot.innerHTML = `
       <article class="agency-letterbot-entry" data-entry-id="${escapeHtml(entry.id)}">
-        <div class="agency-letterbot-entry-head">
-          <strong>Letter</strong>
-        </div>
-        <textarea class="agency-letterbot-text" data-entry-text="${escapeHtml(entry.id)}" rows="5" placeholder="Letter text for Dream Letter Sendout Tool">${escapeHtml(entry.text || '')}</textarea>
+        <textarea class="agency-letterbot-text" data-entry-text="${escapeHtml(entry.id)}" rows="8" placeholder="Write your mailing message here...">${escapeHtml(entry.text || '')}</textarea>
         <div class="agency-letterbot-media-row">
-          <label class="agency-letterbot-media-option">
+          <label class="agency-letterbot-media-chip">
             <input type="radio" name="media-${escapeHtml(entry.id)}" value="none" data-entry-media="${escapeHtml(entry.id)}" ${entry.mediaType === 'none' ? 'checked' : ''}>
-            <span>No media</span>
+            <span>Text only</span>
           </label>
-          <label class="agency-letterbot-media-option">
+          <label class="agency-letterbot-media-chip">
             <input type="radio" name="media-${escapeHtml(entry.id)}" value="photo" data-entry-media="${escapeHtml(entry.id)}" ${entry.mediaType === 'photo' ? 'checked' : ''}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg>
             <span>Photo</span>
           </label>
-          <label class="agency-letterbot-media-option">
+          <label class="agency-letterbot-media-chip">
             <input type="radio" name="media-${escapeHtml(entry.id)}" value="video" data-entry-media="${escapeHtml(entry.id)}" ${entry.mediaType === 'video' ? 'checked' : ''}>
-            <span>Video (max 3 sec)</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="6" width="14" height="12" rx="2"/><path d="M17 10l4-2v8l-4-2"/></svg>
+            <span>Video</span>
           </label>
           <input type="file" class="agency-letterbot-file hidden" data-entry-file="${escapeHtml(entry.id)}" accept="${entry.mediaType === 'video' ? 'video/mp4' : 'image/jpeg,image/png,image/webp'}">
           <button type="button" class="agency-letterbot-upload" data-entry-upload="${escapeHtml(entry.id)}">${entry.hasMedia ? escapeHtml(entry.mediaName || 'Change file') : 'Choose file'}</button>
@@ -232,7 +273,10 @@
       startCountdownTimer();
       startLetterBotPoll();
     } catch (error) {
-      if (statusEl) statusEl.textContent = error.message || 'Could not load LetterBot';
+      if (errorEl) {
+        errorEl.textContent = error.message || 'Could not load LetterBot';
+        errorEl.classList.remove('hidden');
+      }
     }
   }
 
@@ -249,7 +293,6 @@
     letterBotState = result.letterbot;
     renderLetterBotEntries();
     updateLetterBotStatus();
-    if (statusEl) statusEl.textContent = 'Saved';
   }
 
   async function uploadEntryMedia(entryId, file, mediaType) {

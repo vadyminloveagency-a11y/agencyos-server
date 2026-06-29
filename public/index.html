@@ -773,24 +773,98 @@
         <button id="agencyLetterBotAuthorizeBtn" class="agency-section-authorize-btn hidden" type="button">Connect profile</button>
       </div>
       <div id="agencyLetterBotContent" class="agency-letterbot-content hidden">
-        <div class="agency-letterbot-toolbar">
-          <label class="agency-letterbot-interval">
-            <span>Interval (minutes)</span>
-            <input id="agencyLetterBotInterval" type="number" min="5" max="240" step="1" value="20">
-          </label>
-          <div class="agency-letterbot-actions">
-            <button id="agencyLetterBotSaveBtn" class="agency-letterbot-btn" type="button">Save</button>
-            <button id="agencyLetterBotSendNowBtn" class="agency-letterbot-btn" type="button">Send now</button>
-            <button id="agencyLetterBotStartBtn" class="agency-letterbot-btn primary" type="button">Start</button>
-            <button id="agencyLetterBotStopBtn" class="agency-letterbot-btn danger" type="button">Stop</button>
+        <div class="agency-letterbot-layout">
+          <div class="agency-letterbot-main">
+            <header class="agency-letterbot-page-head">
+              <div>
+                <h2 class="agency-letterbot-title">Mailing</h2>
+                <p class="agency-letterbot-subtitle">Letter Sendout · one letter to online men</p>
+              </div>
+              <label class="agency-letterbot-interval">
+                <span>Template refresh (min)</span>
+                <input id="agencyLetterBotInterval" type="number" min="5" max="240" step="1" value="20">
+              </label>
+            </header>
+
+            <section class="agency-letterbot-compose-card">
+              <div class="agency-letterbot-compose-head">
+                <span class="agency-letterbot-compose-label">NEW MAILING</span>
+              </div>
+              <div id="agencyLetterBotEntries" class="agency-letterbot-entries"></div>
+              <div class="agency-letterbot-compose-footer">
+                <div class="agency-letterbot-compose-tools">
+                  <button id="agencyLetterBotSaveBtn" class="agency-letterbot-tool-btn" type="button">Save</button>
+                  <button id="agencyLetterBotSendNowBtn" class="agency-letterbot-tool-btn" type="button">Send now</button>
+                </div>
+                <div class="agency-letterbot-compose-actions">
+                  <button id="agencyLetterBotStopBtn" class="agency-letterbot-btn danger" type="button">Stop</button>
+                  <button id="agencyLetterBotStartBtn" class="agency-letterbot-start-btn" type="button">
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+                    Start mailing
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <div id="agencyLetterBotError" class="agency-letterbot-error hidden"></div>
+            <div id="agencyLetterBotBuild" class="agency-letterbot-build"></div>
           </div>
+
+          <aside class="agency-letterbot-sidebar" aria-label="Mailing stats">
+            <div class="agency-letterbot-side-card">
+              <div class="agency-letterbot-kv">
+                <span class="agency-letterbot-kv-label">Status</span>
+                <span id="agencyLetterBotSideStatus" class="agency-letterbot-kv-value is-stopped">
+                  <span class="agency-letterbot-dot" aria-hidden="true"></span>
+                  <span id="agencyLetterBotSideStatusText">Stopped</span>
+                </span>
+              </div>
+              <div class="agency-letterbot-kv">
+                <span class="agency-letterbot-kv-label">Category</span>
+                <span id="agencyLetterBotSideCategory" class="agency-letterbot-kv-value is-online">Online</span>
+              </div>
+              <div class="agency-letterbot-kv">
+                <span class="agency-letterbot-kv-label">Excl. Favs</span>
+                <span class="agency-letterbot-kv-value is-yes">Yes</span>
+              </div>
+              <div class="agency-letterbot-kv">
+                <span class="agency-letterbot-kv-label">Started at</span>
+                <span id="agencyLetterBotSideStarted" class="agency-letterbot-kv-value">—</span>
+              </div>
+            </div>
+
+            <div class="agency-letterbot-stats-row">
+              <div class="agency-letterbot-stat-box">
+                <span class="agency-letterbot-stat-label">TODAY</span>
+                <div class="agency-letterbot-stat-body">
+                  <span id="agencyLetterBotStatToday" class="agency-letterbot-stat-value is-green">0</span>
+                  <span class="agency-letterbot-stat-icon is-green" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M22 2 11 13"/>
+                      <path d="M22 2 15 22 11 13 2 9 22 2Z"/>
+                    </svg>
+                  </span>
+                </div>
+                <span class="agency-letterbot-stat-hint">all sends today</span>
+              </div>
+              <div class="agency-letterbot-stat-box">
+                <span class="agency-letterbot-stat-label">SENT</span>
+                <div class="agency-letterbot-stat-body">
+                  <span id="agencyLetterBotStatSession" class="agency-letterbot-stat-value is-green">0</span>
+                  <span class="agency-letterbot-stat-icon is-green" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M22 2 11 13"/>
+                      <path d="M22 2 15 22 11 13 2 9 22 2Z"/>
+                    </svg>
+                  </span>
+                </div>
+                <span class="agency-letterbot-stat-hint">this letter</span>
+              </div>
+            </div>
+
+            <p id="agencyLetterBotCountdown" class="agency-letterbot-side-note">LetterBot is stopped</p>
+          </aside>
         </div>
-        <div id="agencyLetterBotStatus" class="agency-letterbot-status">Loading...</div>
-        <div id="agencyLetterBotSentCount" class="agency-letterbot-sent-count">Men processed: 0 (session) · 0 (today)</div>
-        <div id="agencyLetterBotBuild" class="agency-letterbot-build"></div>
-        <div id="agencyLetterBotAudience" class="agency-letterbot-audience">Direction: Online gentlemen (exclude Favorites, Contacts)</div>
-        <div id="agencyLetterBotCountdown" class="agency-letterbot-countdown"></div>
-        <div id="agencyLetterBotEntries" class="agency-letterbot-entries"></div>
       </div>
     </section>
     <section class="agency-coming-soon-panel hidden" data-agency-panel="sender" aria-label="Sender">
@@ -1349,8 +1423,8 @@
     </div>
   </div>
 </div>
-  <script src="letterbot.js?v=20260629-3"></script>
-  <script src="app.js?v=20260629-3"></script>
+  <script src="letterbot.js?v=20260629-4"></script>
+  <script src="app.js?v=20260629-4"></script>
 </body>
 </html>
 

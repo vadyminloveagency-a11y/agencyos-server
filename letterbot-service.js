@@ -8,7 +8,7 @@ const LETTERBOT_DEFAULT_AUDIENCE = 'online';
 const LETTERBOT_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const LETTERBOT_MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const LETTERBOT_SEND_TICK_MS = 10_000;
-const LETTERBOT_BUILD_ID = '20260629-3';
+const LETTERBOT_BUILD_ID = '20260629-4';
 const letterBotRunsInFlight = new Map();
 const letterBotSendLoops = new Map();
 
@@ -26,6 +26,7 @@ function defaultLetterBotConfig() {
     menSentSession: 0,
     menSentToday: 0,
     menSentDay: '',
+    sessionStartedAt: '',
     entries: []
   };
 }
@@ -58,6 +59,7 @@ function normalizeLetterBotConfig(raw) {
     menSentSession: Math.max(0, Number(raw.menSentSession) || 0),
     menSentToday: Math.max(0, Number(raw.menSentToday) || 0),
     menSentDay: String(raw.menSentDay || ''),
+    sessionStartedAt: String(raw.sessionStartedAt || ''),
     entries: singleEntry ? [singleEntry] : []
   };
 }
@@ -109,6 +111,7 @@ function publicLetterBotConfig(profile, profileId, mediaRoot) {
     nextRunAt: config.nextRunAt,
     menSentSession: config.menSentSession,
     menSentToday: config.menSentToday,
+    sessionStartedAt: config.sessionStartedAt,
     buildId: LETTERBOT_BUILD_ID,
     entries: config.entries.map(entry => publicLetterBotEntry(entry, profileId, mediaRoot))
   };
@@ -169,6 +172,7 @@ function ensureLetterBotDailyCounter(config) {
 
 function resetLetterBotSessionCounters(config) {
   config.menSentSession = 0;
+  config.sessionStartedAt = new Date().toISOString();
   ensureLetterBotDailyCounter(config);
   return config;
 }
