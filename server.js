@@ -66,8 +66,8 @@ const DREAM_XHR_HEADERS = {
 import * as letterBotService from './letterbot-service.js';
 import { ensurePlaywrightChromium, resolvePlaywrightBrowsersPath } from './playwright-browsers.js';
 import { assertServerPlaywrightAllowed, isServerPlaywrightDisabled, serverPlaywrightDisableReason } from './server-capabilities.js';
-const AGENCYOS_SERVER_VERSION = '0.1.9';
-const AGENCYOS_UI_BUILD = '20260629-18';
+const AGENCYOS_SERVER_VERSION = '0.1.10';
+const AGENCYOS_UI_BUILD = '20260629-19';
 const DREAM_MAX_BROWSER_SESSIONS = isServerPlaywrightDisabled()
   ? 0
   : Math.max(1, Number(process.env.DREAM_MAX_BROWSER_SESSIONS) || 1);

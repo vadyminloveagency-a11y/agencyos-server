@@ -531,11 +531,16 @@ function isWorkspaceLadyConnected() {
 async function openWorkspaceDreamUrl(url) {
   const targetUrl = String(url || '').trim();
   if (!targetUrl) return;
+  const isDreamUrl = /^https:\/\/([^/]+\.)?dream-singles\.com\//i.test(targetUrl);
   if (workspaceEmbedded) {
     await extensionCommand('OPEN_DREAM_URL', { url: targetUrl }, 45000);
     return;
   }
-  if (/^https:\/\/([^/]+\.)?dream-singles\.com\//i.test(targetUrl) && window.agencyElectron?.openDreamUrl && activeProfileId) {
+  if (isDreamUrl) {
+    if (!activeProfileId) throw new Error('Сначала включите анкету (On).');
+    if (!window.agencyElectron?.openDreamUrl) {
+      throw new Error('Откройте CRM в программе AgencyOS Desktop v0.2.0 (не в браузере).');
+    }
     const result = await window.agencyElectron.openDreamUrl(activeProfileId, targetUrl);
     if (!result?.ok) throw new Error(result?.error || 'Could not open Dream window');
     return;

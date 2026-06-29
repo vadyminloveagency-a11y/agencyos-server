@@ -21,7 +21,7 @@ let profilePendingCountsTimer = null;
 const AGENCY_PANEL_KEY = 'agencyos_active_panel';
 const AGENCY_ACCOUNT_TAB_KEY = 'agencyos_account_tab';
 const REMEMBER_ACCESS_KEY = 'agencyos_remember_access';
-const AGENCY_DESKTOP_CLIENT = Boolean(window.agencyElectron) || /Electron/i.test(navigator.userAgent || '');
+const AGENCY_DESKTOP_CLIENT = Boolean(window.agencyElectron);
 const AGENCY_DESKTOP_SESSION_KEY = 'agencyos_desktop_session_id';
 if (AGENCY_DESKTOP_CLIENT) {
   const desktopSessionId = new URLSearchParams(window.location.search).get('desktopVersion') || 'desktop';
@@ -1373,15 +1373,14 @@ async function openDreamUrl(url) {
   const targetUrl = String(url || 'https://www.dream-singles.com/members/messaging/inbox').trim();
   if (!activeProfileId) {
     showProfileChoice();
-    throw new Error('Choose a profile first');
+    throw new Error('Сначала выберите и включите анкету (On).');
   }
-  if (window.agencyElectron?.openDreamUrl) {
-    const result = await window.agencyElectron.openDreamUrl(activeProfileId, targetUrl);
-    if (!result?.ok) throw new Error(result?.error || 'Could not open Dream window');
-    return result;
+  if (!window.agencyElectron?.openDreamUrl) {
+    throw new Error('Ссылки Dream открываются только в AgencyOS Desktop v0.2.0.');
   }
-  await openDesktopUrl(targetUrl);
-  return { ok: true };
+  const result = await window.agencyElectron.openDreamUrl(activeProfileId, targetUrl);
+  if (!result?.ok) throw new Error(result?.error || 'Could not open Dream window');
+  return result;
 }
 
 document.addEventListener('click', event => {

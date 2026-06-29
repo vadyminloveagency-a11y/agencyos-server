@@ -63,9 +63,6 @@ export class DreamProfileManager {
     const id = String(profileId || '').trim();
     if (!id) throw new Error('Profile id is required');
     const profileSession = this.getProfileSession(id);
-    try {
-      await profileSession.clearStorageData();
-    } catch {}
     const redeem = await this.launchProfile(id);
     const cookies = Array.isArray(redeem.dreamCookies) ? redeem.dreamCookies : [];
     if (!cookies.length) {
