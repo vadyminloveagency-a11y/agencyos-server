@@ -115,6 +115,7 @@ app.get('/api/health', (req, res) => {
     ok: true,
     service: 'dream-team',
     storage: USE_POSTGRES ? 'postgres' : 'file',
+    letterBotBuild: letterBotService.LETTERBOT_BUILD_ID,
     time: new Date().toISOString()
   });
 });

@@ -8,6 +8,7 @@ const LETTERBOT_DEFAULT_AUDIENCE = 'online';
 const LETTERBOT_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const LETTERBOT_MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const LETTERBOT_SEND_TICK_MS = 10_000;
+const LETTERBOT_BUILD_ID = '20260629-2';
 const letterBotRunsInFlight = new Map();
 const letterBotSendLoops = new Map();
 
@@ -107,6 +108,7 @@ function publicLetterBotConfig(profile, profileId, mediaRoot) {
     nextRunAt: config.nextRunAt,
     menSentSession: config.menSentSession,
     menSentToday: config.menSentToday,
+    buildId: LETTERBOT_BUILD_ID,
     entries: config.entries.map(entry => publicLetterBotEntry(entry, profileId, mediaRoot))
   };
 }
@@ -394,27 +396,54 @@ async function selectLetterBotOnlineFilter(page) {
   await page.waitForTimeout(500);
 }
 
+async function dreamSendPageState(page) {
+  return page.evaluate(() => {
+    const spam = document.getElementById('spam');
+    const spamValue = spam?.value ?? spam?.getAttribute?.('value') ?? '';
+    const bodyText = document.body?.innerText || '';
+    const readyByText = /ready to begin sending/i.test(bodyText);
+    const sendButton = document.querySelector('.btn-success')
+      || [...document.querySelectorAll('button, input[type="submit"], input[type="button"], a')].find(el => {
+        if (el.disabled || el.offsetParent === null) return false;
+        const label = (el.textContent || el.value || '').trim();
+        return /^(start|send|begin)/i.test(label);
+      })
+      || null;
+    return {
+      spamValue,
+      hasSpam: Boolean(spam),
+      readyBySpam: spamValue === 'Start',
+      readyByText,
+      hasSendButton: Boolean(sendButton),
+      sendButtonLabel: sendButton ? (sendButton.textContent || sendButton.value || '').trim() : ''
+    };
+  });
+}
+
+function dreamSendPageReady(state) {
+  if (!state) return false;
+  if (state.readyBySpam || state.readyByText) return true;
+  return !state.hasSpam && state.hasSendButton;
+}
+
 async function waitForDreamSendReady(page, timeoutMs = 45_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const ready = await page.evaluate(() => {
-      const spam = document.getElementById('spam');
-      return spam?.value === 'Start';
-    });
-    if (ready) return true;
+    const state = await dreamSendPageState(page);
+    if (dreamSendPageReady(state)) return state;
     await page.waitForTimeout(800);
   }
-  return false;
+  return null;
 }
 
 async function triggerDreamLetterSend(page) {
-  return page.evaluate(() => {
-    const spam = document.getElementById('spam');
-    const spamValue = spam?.value || '';
-    if (spamValue !== 'Start') {
-      return { ok: false, reason: `Dream is not ready to send (status: ${spamValue || 'waiting'})` };
-    }
+  const state = await dreamSendPageState(page);
+  if (!dreamSendPageReady(state)) {
+    const status = state?.spamValue || state?.sendButtonLabel || 'waiting';
+    return { ok: false, reason: `Dream is not ready to send (status: ${status})` };
+  }
 
+  return page.evaluate(() => {
     const inputLastActivity = document.getElementById('inputLastActivity');
     if (inputLastActivity?.options?.length > 1) {
       inputLastActivity.selectedIndex = 1;
@@ -445,7 +474,12 @@ async function triggerDreamLetterSend(page) {
       }
     }
 
-    const sendButton = document.querySelector('.btn-success');
+    const sendButton = document.querySelector('.btn-success')
+      || [...document.querySelectorAll('button, input[type="submit"], input[type="button"], a')].find(el => {
+        if (el.disabled || el.offsetParent === null) return false;
+        const label = (el.textContent || el.value || '').trim();
+        return /^(start|send|begin)/i.test(label);
+      });
     if (!sendButton) return { ok: false, reason: 'Send button was not found on Letter Sendout page' };
     sendButton.click();
     return { ok: true };
@@ -823,5 +857,6 @@ export {
   maybeRunLetterBot,
   runLetterBotNow,
   stopLetterBotSendLoop,
-  restoreLetterBotSendLoops
+  restoreLetterBotSendLoops,
+  LETTERBOT_BUILD_ID
 };

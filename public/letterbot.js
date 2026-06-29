@@ -7,6 +7,7 @@
   const authorizeBtn = document.getElementById('agencyLetterBotAuthorizeBtn');
   const statusEl = document.getElementById('agencyLetterBotStatus');
   const sentCountEl = document.getElementById('agencyLetterBotSentCount');
+  const buildEl = document.getElementById('agencyLetterBotBuild');
   const countdownEl = document.getElementById('agencyLetterBotCountdown');
   const intervalInput = document.getElementById('agencyLetterBotInterval');
   const entriesRoot = document.getElementById('agencyLetterBotEntries');
@@ -17,6 +18,7 @@
   const sendNowBtn = document.getElementById('agencyLetterBotSendNowBtn');
 
   let letterBotState = null;
+  let letterBotBuildId = '';
   let letterBotCountdownTimer = null;
   let letterBotPollTimer = null;
 
@@ -73,6 +75,14 @@
     if (countdownEl) countdownEl.textContent = letterBotState.enabled
       ? `Sending every ~10 sec · Next template: ${formatCountdown(letterBotState.nextRunAt)}`
       : 'LetterBot is stopped';
+    if (buildEl) {
+      const build = letterBotState.buildId || letterBotBuildId || '';
+      const stale = build !== '20260629-2';
+      buildEl.textContent = stale
+        ? `Build ${build || 'old'} · update pending — redeploy Render and hard-refresh (Ctrl+Shift+R)`
+        : `Build ${build}`;
+      buildEl.classList.toggle('is-stale', stale);
+    }
     if (startBtn) startBtn.disabled = letterBotState.enabled;
     if (stopBtn) stopBtn.disabled = !letterBotState.enabled;
   }
@@ -204,6 +214,8 @@
     const profileId = activeProfileId();
     if (!profileId) return;
     try {
+      const health = await fetch('/api/health').then(r => r.json()).catch(() => ({}));
+      letterBotBuildId = String(health?.letterBotBuild || '');
       const result = await apiLetterBot('GET');
       letterBotState = result.letterbot || null;
       if (intervalInput && letterBotState) intervalInput.value = String(letterBotState.intervalMinutes || 20);
