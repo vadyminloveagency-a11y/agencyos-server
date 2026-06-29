@@ -207,6 +207,7 @@ function abortWorkspaceProfileSync() {
 
 if (workspaceEmbedded) {
   document.body.classList.add('workspace-embedded');
+  document.documentElement.classList.remove('workspace-embedded-boot');
 }
 
 function applyWorkspaceTheme(theme) {
@@ -367,6 +368,7 @@ function resetWorkspaceRuntimeForProfile(profileId) {
 async function switchWorkspaceProfileFromShell(profileId) {
   const id = String(profileId || '');
   if (!id || id === activeProfileId) return;
+  renderLoading();
   try {
     resetWorkspaceRuntimeForProfile(id);
     await loadWorkspace();

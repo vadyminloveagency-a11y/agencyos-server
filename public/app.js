@@ -1636,8 +1636,6 @@ function reloadWorkspaceEmbedForProfile(profileId, reason = 'switch-profile') {
 }
 
 function switchWorkspaceProfileInPlace(profileId, reason = 'switch-profile') {
-  reloadWorkspaceEmbedForProfile(profileId, reason);
-  return;
   let sent = false;
   [workspaceEmbedFrame, agencyInboxFrame].forEach(frame => {
     if (!frame?.contentWindow) return;
@@ -1649,7 +1647,7 @@ function switchWorkspaceProfileInPlace(profileId, reason = 'switch-profile') {
     }, '*');
     sent = true;
   });
-  if (!sent) reloadWorkspaceEmbed(reason);
+  if (!sent) reloadWorkspaceEmbedForProfile(profileId, reason);
 }
 
 function getActiveAgencyPanel() {
@@ -1684,9 +1682,8 @@ function setProfileSwitchOverlay(active, profile = null) {
 }
 
 function clearProfileSwitchOverlayOnFrameLoad() {
-  if (document.body.classList.contains('agency-profile-switching')) {
-    waitForAgencyPaint().then(() => setProfileSwitchOverlay(false));
-  }
+  // Keep parent overlay visible until workspace posts WORKSPACE_READY.
+  // Iframe "load" fires before JS/CSS paint and caused a white flash.
 }
 const cancelAddProfileBtn = document.getElementById('cancelAddProfileBtn');
 const newProfileId = document.getElementById('newProfileId');
@@ -2423,7 +2420,7 @@ async function switchWorkingProfile(profileId, options = {}) {
   if (!profile) return;
   if (profileSwitchInProgress && activeProfileId === id) return;
   profileSwitchInProgress = true;
-  setProfileSwitchOverlay(false);
+  setProfileSwitchOverlay(true, profile);
   try {
     activeProfileId = id;
     localStorage.setItem('dream_crm_profile_id', id);
@@ -2681,6 +2678,13 @@ window.addEventListener('message', event => {
     const id = String(event.data.profileId || '');
     if (id) {
       setAgencyProfilePendingCount(id, Math.max(Number(event.data.noReplyCount || 0), Number(event.data.inboxCount || 0)), { playSound: false });
+    }
+    return;
+  }
+  if (event.data?.source === 'dream-workspace' && event.data?.type === 'WORKSPACE_READY' && workspaceCommandFrame) {
+    const readyId = String(event.data.profileId || '');
+    if (document.body.classList.contains('agency-profile-switching') && readyId === String(activeProfileId || '')) {
+      waitForAgencyPaint().then(() => setProfileSwitchOverlay(false));
     }
     return;
   }

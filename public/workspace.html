@@ -8,9 +8,17 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@800;900&display=swap" rel="stylesheet">
   <link rel="icon" type="image/svg+xml" href="assets/inbox-favicon.svg?v=20260621-mail">
-  <link rel="stylesheet" href="workspace.css?v=20260629-reload-overlay-1">
+  <link rel="stylesheet" href="workspace.css?v=20260629-profile-switch-overlay-1">
 </head>
 <body>
+  <script>
+    (function () {
+      try {
+        if (new URLSearchParams(location.search).get('embedded') !== '1') return;
+        document.documentElement.classList.add('workspace-embedded-boot');
+      } catch (_) {}
+    })();
+  </script>
   <div class="workspace-shell">
     <aside class="workspace-list">
       <div class="workspace-control-panel">
