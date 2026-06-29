@@ -4425,19 +4425,23 @@ async function setWorkspaceOnlineFilter(nextOnlineOnly, button = topOnlineBtn) {
   renderCurrentWorkspaceState();
   if (!workspaceOnlyOnline) return;
 
-  const oldText = button?.textContent || '';
+  const restoreLabel = (button?.textContent || '').trim() || (button === onlyOnlineBtn ? 'Only Online' : 'Online');
   if (button) {
     button.disabled = true;
-    button.textContent = 'Loading';
+    button.classList.add('loading');
+    button.innerHTML = 'Loading<span class="workspace-online-loading-dots" aria-hidden="true"><i></i><i></i><i></i></span>';
     button.setAttribute('aria-busy', 'true');
+    button.setAttribute('aria-label', 'Loading online men');
   }
   try {
     await checkWorkspaceOnline();
   } finally {
     if (button) {
       button.disabled = false;
-      button.textContent = oldText || 'Online';
+      button.classList.remove('loading');
+      button.textContent = restoreLabel;
       button.setAttribute('aria-busy', 'false');
+      button.removeAttribute('aria-label');
     }
     renderCurrentWorkspaceState();
   }

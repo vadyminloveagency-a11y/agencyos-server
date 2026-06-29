@@ -7322,6 +7322,44 @@ body.workspace-embedded .workspace-control-panel .workspace-profile-top-online.a
   animation: workspaceTopOnlinePulse 1.25s ease-in-out infinite !important;
 }
 
+body.workspace-embedded .workspace-control-panel .workspace-profile-top-online.loading,
+body.workspace-embedded .workspace-control-panel .workspace-online-filter.loading {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 3px !important;
+  cursor: wait !important;
+}
+
+body.workspace-embedded .workspace-control-panel .workspace-profile-top-online .workspace-online-loading-dots,
+body.workspace-embedded .workspace-control-panel .workspace-online-filter .workspace-online-loading-dots {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 2px !important;
+  margin-left: 1px !important;
+}
+
+body.workspace-embedded .workspace-control-panel .workspace-profile-top-online .workspace-online-loading-dots i,
+body.workspace-embedded .workspace-control-panel .workspace-online-filter .workspace-online-loading-dots i {
+  width: 3px !important;
+  height: 3px !important;
+  border-radius: 50% !important;
+  background: currentColor !important;
+  opacity: .35;
+  animation: workspaceInboxBgDot 1s ease-in-out infinite;
+}
+
+body.workspace-embedded .workspace-control-panel .workspace-profile-top-online .workspace-online-loading-dots i:nth-child(2),
+body.workspace-embedded .workspace-control-panel .workspace-online-filter .workspace-online-loading-dots i:nth-child(2) {
+  animation-delay: .16s;
+}
+
+body.workspace-embedded .workspace-control-panel .workspace-profile-top-online .workspace-online-loading-dots i:nth-child(3),
+body.workspace-embedded .workspace-control-panel .workspace-online-filter .workspace-online-loading-dots i:nth-child(3) {
+  animation-delay: .32s;
+}
+
 @keyframes workspaceTopOnlinePulse {
   0% {
     box-shadow: 0 0 0 0 rgba(0, 171, 139, .32);
