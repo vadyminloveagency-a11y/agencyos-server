@@ -8,9 +8,10 @@ const LETTERBOT_DEFAULT_AUDIENCE = 'online';
 const LETTERBOT_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const LETTERBOT_MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const LETTERBOT_SEND_TICK_MS = 10_000;
-const LETTERBOT_BUILD_ID = '20260629-8';
+const LETTERBOT_BUILD_ID = '20260629-9';
 const letterBotRunsInFlight = new Map();
 const letterBotSendLoops = new Map();
+const letterBotStatsRefreshAt = new Map();
 
 function defaultLetterBotConfig() {
   return {
@@ -27,7 +28,7 @@ function defaultLetterBotConfig() {
     menSentToday: 0,
     menSentDay: '',
     sessionStartedAt: '',
-    sendEvents: [],
+    dreamStatsAt: '',
     entries: []
   };
 }
@@ -61,12 +62,10 @@ function normalizeLetterBotConfig(raw) {
     menSentToday: Math.max(0, Number(raw.menSentToday) || 0),
     menSentDay: String(raw.menSentDay || ''),
     sessionStartedAt: String(raw.sessionStartedAt || ''),
-    sendEvents: Array.isArray(raw.sendEvents)
-      ? raw.sendEvents.map(item => String(item || '')).filter(Boolean).slice(-2000)
-      : [],
+    dreamStatsAt: String(raw.dreamStatsAt || ''),
     entries: singleEntry ? [singleEntry] : []
   };
-  return recomputeLetterBotSendCounters(normalized);
+  return normalized;
 }
 
 function letterBotMediaDir(mediaRoot, profileId) {
@@ -166,47 +165,24 @@ function letterBotTodayKey(date = new Date()) {
   return date.toISOString().slice(0, 10);
 }
 
-function recomputeLetterBotSendCounters(config) {
-  const today = letterBotTodayKey();
-  const sessionStart = Date.parse(config.sessionStartedAt || '');
-  const events = Array.isArray(config.sendEvents) ? config.sendEvents : [];
-  let todayCount = 0;
-  let sessionCount = 0;
-  for (const at of events) {
-    const stamp = String(at || '');
-    const ts = Date.parse(stamp);
-    if (!Number.isFinite(ts)) continue;
-    if (stamp.slice(0, 10) === today) todayCount += 1;
-    if (Number.isFinite(sessionStart) && ts >= sessionStart) sessionCount += 1;
+function applyDreamSendPageStats(profile, stats) {
+  if (!stats || typeof stats !== 'object') return normalizeLetterBotConfig(profile?.letterBot);
+  const config = normalizeLetterBotConfig(profile.letterBot);
+  if (Number.isFinite(stats.dailyTotal) && stats.dailyTotal >= 0) {
+    config.menSentToday = stats.dailyTotal;
+    config.menSentDay = letterBotTodayKey();
   }
-  config.menSentDay = today;
-  config.menSentToday = todayCount;
-  config.menSentSession = sessionCount;
+  if (Number.isFinite(stats.sessionSent) && stats.sessionSent >= 0) {
+    config.menSentSession = stats.sessionSent;
+  }
+  config.dreamStatsAt = new Date().toISOString();
+  profile.letterBot = config;
   return config;
-}
-
-function ensureLetterBotDailyCounter(config) {
-  return recomputeLetterBotSendCounters(config);
 }
 
 function resetLetterBotSessionCounters(config) {
   config.menSentSession = 0;
   config.sessionStartedAt = new Date().toISOString();
-  return recomputeLetterBotSendCounters(config);
-}
-
-function recordLetterBotSends(profile, count = 1) {
-  const config = normalizeLetterBotConfig(profile.letterBot);
-  const delta = Math.max(0, Number(count) || 0);
-  if (!delta) return config;
-  const now = new Date().toISOString();
-  const events = Array.isArray(config.sendEvents) ? config.sendEvents.slice() : [];
-  for (let i = 0; i < delta; i += 1) events.push(now);
-  config.sendEvents = events.slice(-2000);
-  recomputeLetterBotSendCounters(config);
-  config.lastSuccessAt = now;
-  config.lastError = '';
-  profile.letterBot = config;
   return config;
 }
 
@@ -239,52 +215,94 @@ function markLetterBotTemplateRun(profile, success = true) {
   return config;
 }
 
-async function readDreamMenSentCount(page) {
+async function readDreamSendPageStats(page) {
   return page.evaluate(() => {
-    const ids = ['sentCount', 'lettersSent', 'countSent', 'sentMen', 'menSent'];
-    for (const id of ids) {
-      const node = document.getElementById(id);
-      if (!node) continue;
-      const value = parseInt(String(node.textContent || node.value || '').replace(/[^\d]/g, ''), 10);
-      if (Number.isFinite(value) && value >= 0) return value;
+    const parseCount = value => {
+      const match = String(value || '').match(/(\d[\d,]*)/);
+      if (!match) return null;
+      const parsed = parseInt(match[1].replace(/,/g, ''), 10);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+    };
+
+    const result = { dailyTotal: null, sessionSent: null };
+
+    const bodyText = document.body?.innerText || '';
+    const dailyMatch = bodyText.match(/Daily\s*Total\s*:?\s*([\d,]+)/i);
+    if (dailyMatch) result.dailyTotal = parseCount(dailyMatch[1]);
+
+    const sessionMatch = bodyText.match(/Successfully\s+sent\s+([\d,]+)\s+letters?/i);
+    if (sessionMatch) result.sessionSent = parseCount(sessionMatch[1]);
+
+    const rows = [...document.querySelectorAll('tr, li, p, div, label, span, td, th')];
+    for (const row of rows) {
+      const text = (row.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!text) continue;
+      if (/^Daily\s*Total$/i.test(text) || /^Daily\s*Total\s*:/i.test(text)) {
+        const inline = text.match(/Daily\s*Total\s*:?\s*([\d,]+)/i);
+        if (inline) result.dailyTotal = parseCount(inline[1]);
+        const next = row.nextElementSibling;
+        if (result.dailyTotal == null && next) result.dailyTotal = parseCount(next.textContent);
+      }
+      if (/Successfully\s+sent\s+[\d,]+\s+letters?/i.test(text)) {
+        const inline = text.match(/Successfully\s+sent\s+([\d,]+)\s+letters?/i);
+        if (inline) result.sessionSent = parseCount(inline[1]);
+      }
     }
 
-    const dataNode = document.querySelector('[data-sent-count]');
-    if (dataNode) {
-      const value = parseInt(String(dataNode.getAttribute('data-sent-count') || dataNode.textContent || '').replace(/[^\d]/g, ''), 10);
-      if (Number.isFinite(value) && value >= 0) return value;
+    const sentCountNode = document.getElementById('sentCount');
+    if (sentCountNode && result.sessionSent == null) {
+      result.sessionSent = parseCount(sentCountNode.textContent || sentCountNode.value);
     }
 
-    const countNode = document.querySelector('.sent-count');
-    if (countNode) {
-      const value = parseInt(String(countNode.textContent || '').replace(/[^\d]/g, ''), 10);
-      if (Number.isFinite(value) && value >= 0) return value;
-    }
-
-    const statusBox = document.querySelector('#sendStatus, .send-status, #mailingStats, .mailing-stats');
-    if (statusBox) {
-      const text = statusBox.innerText || '';
-      const match = text.match(/(?:sent|processed|delivered)\s*[:\-]?\s*(\d+)/i);
-      if (match) return parseInt(match[1], 10);
-    }
-
-    return null;
+    if (result.dailyTotal == null && result.sessionSent == null) return null;
+    return result;
   }).catch(() => null);
 }
 
-async function confirmDreamLetterSend(page, beforeCount) {
-  await page.waitForTimeout(2500);
-  const afterCount = await readDreamMenSentCount(page);
-  if (Number.isFinite(beforeCount) && Number.isFinite(afterCount) && afterCount > beforeCount) {
-    return afterCount - beforeCount;
+async function dreamSendWasConfirmed(page, beforeStats, afterStats) {
+  if (
+    Number.isFinite(beforeStats?.sessionSent) &&
+    Number.isFinite(afterStats?.sessionSent) &&
+    afterStats.sessionSent > beforeStats.sessionSent
+  ) {
+    return true;
   }
-
-  const alertConfirmed = await page.evaluate(() => {
+  if (
+    Number.isFinite(beforeStats?.dailyTotal) &&
+    Number.isFinite(afterStats?.dailyTotal) &&
+    afterStats.dailyTotal > beforeStats.dailyTotal
+  ) {
+    return true;
+  }
+  return page.evaluate(() => {
     const alerts = [...document.querySelectorAll('.alert-success, .alert.alert-success')];
     return alerts.some(node => /message sent|letter sent|successfully sent|was sent/i.test(node.textContent || ''));
   }).catch(() => false);
+}
 
-  return alertConfirmed ? 1 : 0;
+async function refreshLetterBotDreamStats(deps, profileId, profile, options = {}) {
+  const id = String(profileId || '');
+  const session = deps.dreamBrowserSessions.get(id);
+  if (!session?.page) return null;
+  const page = session.page;
+  const onSendPage = /\/members\/messaging\/bot\/send/i.test(page.url() || '');
+  if (!onSendPage) {
+    if (options.allowNavigate === false) return null;
+    await openLetterBotSendPage(page).catch(() => {});
+    await selectLetterBotOnlineFilter(page).catch(() => {});
+  }
+  const stats = await readDreamSendPageStats(page);
+  if (stats) applyDreamSendPageStats(profile, stats);
+  return stats;
+}
+
+async function refreshLetterBotDreamStatsIfDue(deps, profileId, profile, minMs = 12_000) {
+  const id = String(profileId || '');
+  const last = letterBotStatsRefreshAt.get(id) || 0;
+  if (Date.now() - last < minMs) return null;
+  const stats = await refreshLetterBotDreamStats(deps, id, profile, { allowNavigate: true });
+  if (stats) letterBotStatsRefreshAt.set(id, Date.now());
+  return stats;
 }
 
 function stopLetterBotSendLoop(profileId) {
@@ -605,14 +623,19 @@ async function trySendOneDreamLetter(deps, profileId) {
   const ready = await waitForDreamSendReady(page, 5000);
   if (!ready) return false;
 
-  const beforeCount = await readDreamMenSentCount(page);
+  const beforeStats = await readDreamSendPageStats(page);
   const result = await triggerDreamLetterSend(page);
   if (!result?.ok) return false;
 
-  const sentCount = await confirmDreamLetterSend(page, beforeCount);
-  if (!sentCount) return false;
+  await page.waitForTimeout(2500);
+  const afterStats = await readDreamSendPageStats(page);
+  if (afterStats) applyDreamSendPageStats(profile, afterStats);
+  const confirmed = await dreamSendWasConfirmed(page, beforeStats, afterStats);
+  if (!confirmed) return false;
 
-  recordLetterBotSends(profile, sentCount);
+  config.lastSuccessAt = new Date().toISOString();
+  config.lastError = '';
+  profile.letterBot = config;
   profile.updatedAt = new Date().toISOString();
   deps.writeDb(db);
   return true;
@@ -659,11 +682,18 @@ async function runLetterBotNow(deps, profileId, options = {}) {
       await selectLetterBotOnlineFilter(page);
       const ready = await waitForDreamSendReady(page);
       if (!ready) throw new Error('Dream is not ready to send letters yet. Check that the template saved and the sendout page shows Ready to begin sending.');
-      const beforeCount = await readDreamMenSentCount(page);
+      const beforeStats = await readDreamSendPageStats(page);
       const sendResult = await triggerDreamLetterSend(page);
       if (!sendResult?.ok) throw new Error(sendResult?.reason || 'Could not send letter on Dream');
-      const sentCount = await confirmDreamLetterSend(page, beforeCount);
-      if (sentCount) recordLetterBotSends(profile, sentCount);
+      await page.waitForTimeout(2500);
+      const afterStats = await readDreamSendPageStats(page);
+      if (afterStats) applyDreamSendPageStats(profile, afterStats);
+      if (!(await dreamSendWasConfirmed(page, beforeStats, afterStats))) {
+        throw new Error('Dream did not confirm the letter was sent');
+      }
+      config.lastSuccessAt = new Date().toISOString();
+      config.lastError = '';
+      profile.letterBot = config;
     }
 
     if (options.enable === true) {
@@ -672,6 +702,8 @@ async function runLetterBotNow(deps, profileId, options = {}) {
     } else if (normalizeLetterBotConfig(profile.letterBot).enabled) {
       startLetterBotSendLoop(deps, id);
     }
+
+    await refreshLetterBotDreamStats(deps, id, profile, { allowNavigate: true }).catch(() => {});
 
     profile.updatedAt = new Date().toISOString();
     deps.writeDb(db);
@@ -715,12 +747,16 @@ async function maybeRunLetterBot(deps, profileId) {
 function registerLetterBotRoutes(app, deps) {
   const { requireUser, requireProfileForUser, readDb, writeDb, letterBotMediaRoot } = deps;
 
-  app.get('/api/profiles/:id/letterbot', requireUser, (req, res) => {
+  app.get('/api/profiles/:id/letterbot', requireUser, async (req, res) => {
     const db = readDb();
     const id = String(req.params.id);
     try {
-      requireProfileForUser(db, req.user, id);
-      const profile = db.profiles[id];
+      const profile = requireProfileForUser(db, req.user, id);
+      if (req.query.refreshStats === '1' && deps.dreamBrowserSessions.has(id)) {
+        await refreshLetterBotDreamStatsIfDue(deps, id, profile).catch(() => {});
+        profile.updatedAt = new Date().toISOString();
+        writeDb(db);
+      }
       res.json({ ok: true, letterbot: publicLetterBotConfig(profile, id, letterBotMediaRoot) });
     } catch (error) {
       res.status(error.status || 500).json({ ok: false, error: error.message || 'Could not load LetterBot' });

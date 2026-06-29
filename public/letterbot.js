@@ -25,7 +25,7 @@
   const previewBody = document.getElementById('agencyLetterBotPreviewBody');
   const previewCloseBtn = document.getElementById('agencyLetterBotPreviewClose');
 
-  const EXPECTED_BUILD = '20260629-8';
+  const EXPECTED_BUILD = '20260629-9';
 
   let letterBotState = null;
   let letterBotBuildId = '';
@@ -212,7 +212,7 @@
         stopLetterBotPoll();
         return;
       }
-      apiLetterBot('GET')
+      apiLetterBot('GET', '?refreshStats=1')
         .then(result => {
           letterBotState = result.letterbot || letterBotState;
           updateLetterBotStatus();
@@ -369,7 +369,7 @@
     try {
       const health = await fetch('/api/health').then(r => r.json()).catch(() => ({}));
       letterBotBuildId = String(health?.letterBotBuild || '');
-      const result = await apiLetterBot('GET');
+      const result = await apiLetterBot('GET', '?refreshStats=1');
       letterBotState = result.letterbot || null;
       if (intervalInput && letterBotState) intervalInput.value = String(letterBotState.intervalMinutes || 20);
       renderLetterBotEntries();
