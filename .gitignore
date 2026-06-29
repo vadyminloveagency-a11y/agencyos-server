@@ -14,6 +14,7 @@ data*.json
 *.backup*
 allowed_profiles.json
 runtime-data/
+.playwright-browsers/
 
 public/photos/
 public/workspace-attachments/

@@ -8,7 +8,7 @@ services:
     healthCheckPath: /api/health
     envVars:
       - key: PLAYWRIGHT_BROWSERS_PATH
-        value: "0"
+        value: /var/data/playwright-browsers
       - key: NODE_ENV
         value: production
       - key: DREAM_TEAM_DATA_DIR

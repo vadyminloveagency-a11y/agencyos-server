@@ -23,6 +23,7 @@ const DB_BACKUP_PATH = process.env.DREAM_TEAM_DB_BACKUP_PATH || path.join(DATA_D
 const PHOTOS_DIR = process.env.DREAM_TEAM_PHOTOS_DIR || (USING_RUNTIME_DATA_DIR ? path.join(DATA_DIR, 'photos') : path.join(__dirname, 'public', 'photos'));
 const WORKSPACE_ATTACHMENTS_DIR = process.env.DREAM_TEAM_WORKSPACE_ATTACHMENTS_DIR || (USING_RUNTIME_DATA_DIR ? path.join(DATA_DIR, 'workspace-attachments') : path.join(__dirname, 'public', 'workspace-attachments'));
 const LETTERBOT_MEDIA_DIR = process.env.DREAM_TEAM_LETTERBOT_MEDIA_DIR || (USING_RUNTIME_DATA_DIR ? path.join(DATA_DIR, 'letterbot-media') : path.join(__dirname, 'public', 'letterbot-media'));
+const PLAYWRIGHT_BROWSERS_DIR = resolvePlaywrightBrowsersPath(DATA_DIR, USING_RUNTIME_DATA_DIR);
 const ALLOWED_PROFILES_PATH = process.env.DREAM_TEAM_ALLOWED_PROFILES_PATH || path.join(DATA_DIR, 'allowed_profiles.json');
 const CREDENTIAL_KEY_PATH = process.env.DREAM_TEAM_CREDENTIAL_KEY_PATH || path.join(DATA_DIR, '.credential-key');
 const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL || '';
@@ -63,6 +64,7 @@ const DREAM_XHR_HEADERS = {
 };
 
 import * as letterBotService from './letterbot-service.js';
+import { ensurePlaywrightChromium, resolvePlaywrightBrowsersPath } from './playwright-browsers.js';
 const ALLOWED_STATUSES = ['', 'SERIOUS', 'SEXTER', 'OTHER'];
 const DEFAULT_SALARY_RATES = [
   { min: 0, max: 1499, percent: 40 },
@@ -2644,11 +2646,12 @@ async function startDreamBrowser(db, user, profileId, options = {}) {
 
   let playwright;
   try {
-    playwright = await import('playwright');
-  } catch {
-    const error = new Error('Playwright is not installed. Run npm install playwright && npx playwright install chromium');
-    error.status = 500;
-    throw error;
+    playwright = await ensurePlaywrightChromium(PLAYWRIGHT_BROWSERS_DIR);
+  } catch (error) {
+    const message = error?.message || 'Playwright Chromium is not available';
+    const wrapped = new Error(message);
+    wrapped.status = 500;
+    throw wrapped;
   }
 
   const userDataDir = path.join(DATA_DIR, 'runtime-data', 'browser-profiles', id);
@@ -8084,6 +8087,9 @@ async function startServer() {
     };
     letterBotService.registerLetterBotRoutes(app, letterBotDeps);
     letterBotService.startLetterBotScheduler(letterBotDeps);
+    ensurePlaywrightChromium(PLAYWRIGHT_BROWSERS_DIR).catch(error => {
+      console.warn(`[playwright] Warmup skipped: ${error.message || error}`);
+    });
     app.listen(PORT, () => {
       console.log(`Dream Local CRM is running: http://localhost:${PORT}`);
     });
