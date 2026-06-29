@@ -1,6 +1,6 @@
 {
   "name": "agencyos-server",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "repository": {
     "type": "git",
@@ -13,7 +13,7 @@
   },
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check scripts/export-runtime-data.mjs",
+    "check": "node --check server.js && node --check server-capabilities.js && node --check scripts/export-runtime-data.mjs && node scripts/cloud-guard-check.mjs",
     "postinstall": "node scripts/install-playwright-browser.mjs"
   },
   "dependencies": {

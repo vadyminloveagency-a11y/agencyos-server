@@ -371,9 +371,11 @@
   async function apiLetterBot(method, suffix = '', body = null) {
     const profileId = activeProfileId();
     if (!profileId) throw new Error('Choose a profile first');
+    const headers = body ? { 'Content-Type': 'application/json' } : {};
+    if (/Electron/i.test(navigator.userAgent || '')) headers['X-Agency-Client'] = 'desktop';
     const response = await fetch(`/api/profiles/${encodeURIComponent(profileId)}/letterbot${suffix}`, {
       method,
-      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      headers: Object.keys(headers).length ? headers : undefined,
       body: body ? JSON.stringify(body) : undefined
     });
     const result = await parseApiJson(response);

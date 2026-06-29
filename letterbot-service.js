@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { assertServerPlaywrightAllowed, isServerPlaywrightDisabled } from './server-capabilities.js';
 
 const DREAM_LETTER_BOT_COMPOSE_URL = 'https://www.dream-singles.com/members/messaging/bot/';
 const DREAM_LETTER_BOT_SEND_URL = 'https://www.dream-singles.com/members/messaging/bot/send';
@@ -12,6 +13,24 @@ const LETTERBOT_BUILD_ID = '20260629-11';
 const letterBotRunsInFlight = new Map();
 const letterBotSendLoops = new Map();
 const letterBotStatsRefreshAt = new Map();
+
+function isDesktopAgencyClient(req) {
+  return String(req?.headers?.['x-agency-client'] || '').trim().toLowerCase() === 'desktop';
+}
+
+function rejectDesktopServerLetterBot(res) {
+  return res.status(503).json({
+    ok: false,
+    error: 'LetterBot runs on your PC in AgencyOS Desktop. Server-side sending is disabled for the desktop app.'
+  });
+}
+
+function rejectCloudServerLetterBot(res) {
+  return res.status(503).json({
+    ok: false,
+    error: 'LetterBot cannot run on the cloud server. Use AgencyOS Desktop on the operator PC.'
+  });
+}
 
 function defaultLetterBotConfig() {
   return {
@@ -339,6 +358,7 @@ function startLetterBotSendLoop(deps, profileId) {
 }
 
 function restoreLetterBotSendLoops(deps) {
+  if (isServerPlaywrightDisabled()) return;
   try {
     const db = deps.readDb();
     for (const profileId of Object.keys(db.profiles || {})) {
@@ -638,6 +658,7 @@ async function trySendOneDreamLetter(deps, profileId) {
 }
 
 async function runLetterBotNow(deps, profileId, options = {}) {
+  assertServerPlaywrightAllowed('run LetterBot');
   const id = String(profileId || '');
   if (!id) throw new Error('Profile id is required');
   if (letterBotRunsInFlight.has(id)) throw new Error('LetterBot is already running for this profile');
@@ -722,6 +743,7 @@ async function runLetterBotNow(deps, profileId, options = {}) {
 }
 
 async function maybeRunLetterBot(deps, profileId) {
+  if (isServerPlaywrightDisabled()) return false;
   const id = String(profileId || '');
   const db = deps.readDb();
   const profile = db.profiles?.[id];
@@ -901,6 +923,8 @@ function registerLetterBotRoutes(app, deps) {
   });
 
   app.post('/api/profiles/:id/letterbot/start', requireUser, async (req, res) => {
+    if (isServerPlaywrightDisabled()) return rejectCloudServerLetterBot(res);
+    if (isDesktopAgencyClient(req)) return rejectDesktopServerLetterBot(res);
     const id = String(req.params.id);
     try {
       const db = readDb();
@@ -970,6 +994,8 @@ function registerLetterBotRoutes(app, deps) {
   });
 
   app.post('/api/profiles/:id/letterbot/send-now', requireUser, (req, res) => {
+    if (isServerPlaywrightDisabled()) return rejectCloudServerLetterBot(res);
+    if (isDesktopAgencyClient(req)) return rejectDesktopServerLetterBot(res);
     const db = readDb();
     const id = String(req.params.id);
     try {

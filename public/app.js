@@ -66,6 +66,19 @@ agencyInboxSound.preload = 'auto';
 agencyInboxSound.volume = 1;
 document.body.classList.toggle('agency-desktop-app', AGENCY_DESKTOP_CLIENT);
 document.body.classList.toggle('agency-web-client', !AGENCY_DESKTOP_CLIENT);
+
+async function checkAgencyServerCapabilities() {
+  try {
+    const response = await fetch('/api/health', { cache: 'no-store' });
+    if (!response.ok) return;
+    const data = await response.json();
+    if (AGENCY_DESKTOP_CLIENT && data.serverPlaywright !== false) {
+      console.warn('[AgencyOS] Cloud server is outdated: it can still launch Chrome and run out of memory. Deploy the latest server version.');
+    }
+  } catch {}
+}
+checkAgencyServerCapabilities();
+
 if (!ladyConnected && !['stats', 'adminPanel', 'settings'].includes(currentView)) {
   currentView = 'mandarinHome';
   localStorage.setItem('dream_crm_view', 'mandarinHome');
@@ -1344,18 +1357,30 @@ function installBrokenAvatarFallbacks() {
   }).observe(document.body, { childList: true, subtree: true });
 }
 
+async function openDesktopUrl(url) {
+  const targetUrl = String(url || '').trim();
+  if (!targetUrl) return { ok: false, error: 'Empty URL' };
+  if (window.agencyElectron?.openExternalUrl) {
+    const result = await window.agencyElectron.openExternalUrl(targetUrl);
+    if (!result?.ok) throw new Error(result?.error || 'Could not open link');
+    return result;
+  }
+  window.open(targetUrl, '_blank', 'noopener,noreferrer');
+  return { ok: true };
+}
+
 async function openDreamUrl(url) {
   const targetUrl = String(url || 'https://www.dream-singles.com/members/messaging/inbox').trim();
   if (!activeProfileId) {
     showProfileChoice();
-    return { ok: false, error: 'Choose a profile first' };
+    throw new Error('Choose a profile first');
   }
   if (window.agencyElectron?.openDreamUrl) {
     const result = await window.agencyElectron.openDreamUrl(activeProfileId, targetUrl);
     if (!result?.ok) throw new Error(result?.error || 'Could not open Dream window');
     return result;
   }
-  window.open(targetUrl, '_blank', 'noopener,noreferrer');
+  await openDesktopUrl(targetUrl);
   return { ok: true };
 }
 
@@ -2013,6 +2038,7 @@ async function serverProfileRequestFor(profileId, action, options = {}) {
   if (!id) throw new Error('No profile selected');
   const headers = new Headers({ 'Content-Type': 'application/json', ...(options.headers || {}) });
   headers.set('X-Profile-ID', id);
+  if (AGENCY_DESKTOP_CLIENT) headers.set('X-Agency-Client', 'desktop');
   const timeoutMs = Math.max(0, Number(options.timeoutMs || 0) || 0);
   const controller = timeoutMs ? new AbortController() : null;
   const timer = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
@@ -2542,10 +2568,31 @@ async function connectProfileById(profileId, options = {}) {
   profileConnectingIds.add(id);
   renderSidebarProfileDock();
   try {
-    const result = await serverProfileRequestFor(id, 'server-connect', {
-      body: { syncInbox: options.syncInbox !== false, maxPages: options.maxPages || 3 }
-    });
-    await prepareLocalDreamProfile(id);
+    let result;
+    if (AGENCY_DESKTOP_CLIENT) {
+      await prepareLocalDreamProfile(id);
+      result = await serverProfileRequestFor(id, 'server-connect', {
+        body: {
+          syncInbox: false,
+          maxPages: 1,
+          force: true,
+          keepOnline: false,
+          startBrowser: false,
+          clientMode: 'desktop'
+        }
+      }).catch(error => {
+        console.warn('Server session sync after desktop Dream login:', error);
+        return { letters: [], imported: 0, serverWarning: error.message || String(error) };
+      });
+    } else {
+      result = await serverProfileRequestFor(id, 'server-connect', {
+        body: {
+          syncInbox: options.syncInbox !== false,
+          maxPages: options.maxPages || 3
+        }
+      });
+      await prepareLocalDreamProfile(id);
+    }
     profileServerConnectedById.set(id, true);
     setProfileMarkedConnected(id, true);
     syncActiveLadyConnectedFromProfiles();
@@ -7072,7 +7119,7 @@ googleDriveNavBtn?.addEventListener('click', () => {
     alert('Google Drive link is not configured for this profile.');
     return;
   }
-  window.open(url, '_blank', 'noopener,noreferrer');
+  openDesktopUrl(url).catch(error => alert(error.message || 'Could not open Google Drive'));
 });
 
 function closeAgencyDriveModal() {
@@ -7122,7 +7169,7 @@ agencyDriveModal?.addEventListener('click', event => {
   if (!button) return;
   const url = String(button.dataset.driveUrl || '').trim();
   if (!url) return;
-  window.open(url, '_blank', 'noopener,noreferrer');
+  openDesktopUrl(url).catch(error => alert(error.message || 'Could not open Google Drive'));
 });
 agencyDriveModal?.addEventListener('keydown', event => {
   if (event.key === 'Escape') closeAgencyDriveModal();
@@ -9054,12 +9101,27 @@ async function connectSelectedLady() {
   openLadyBtn.disabled = true;
   openLadyBtn.textContent = 'Connecting...';
   try {
-    const result = await serverProfileRequest('server-connect', {
-      body: { syncInbox: true, maxPages: 3 }
-    });
+    let result;
+    if (AGENCY_DESKTOP_CLIENT) {
+      await prepareLocalDreamProfile(activeProfileId);
+      result = await serverProfileRequest('server-connect', {
+        body: {
+          syncInbox: false,
+          maxPages: 1,
+          force: true,
+          keepOnline: false,
+          startBrowser: false,
+          clientMode: 'desktop'
+        }
+      }).catch(error => ({ letters: [], imported: 0, serverWarning: error.message }));
+    } else {
+      result = await serverProfileRequest('server-connect', {
+        body: { syncInbox: true, maxPages: 3 }
+      });
+      await prepareLocalDreamProfile(activeProfileId);
+    }
     const noReplyCount = agencyPendingLetterCount(result?.letters || []);
     setAgencyProfilePendingCount(activeProfileId, noReplyCount, { playSound: true });
-    await prepareLocalDreamProfile(activeProfileId);
     ladyConnected = true;
     localStorage.setItem(`dream_team_lady_connected_${activeProfileId}`, '1');
     showExtensionStatus({
@@ -9184,7 +9246,11 @@ async function enterCrm() {
     const response = await fetch(setupMode ? '/api/auth/setup' : '/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: loginUsername, password: loginPassword })
+      body: JSON.stringify({
+        username: loginUsername,
+        password: loginPassword,
+        clientType: AGENCY_DESKTOP_CLIENT ? 'desktop' : 'web'
+      })
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Could not sign in');
@@ -10560,7 +10626,7 @@ agencyAccountRows?.addEventListener('click', event => {
     event.preventDefault();
     event.stopPropagation();
     const url = String(materialAction.dataset.agencyMaterialUrl || '').trim();
-    if (url) window.open(url, '_blank', 'noopener,noreferrer');
+    if (url) openDesktopUrl(url).catch(error => alert(error.message || 'Could not open link'));
     return;
   }
   if (!action && !userAction) return;

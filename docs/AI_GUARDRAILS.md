@@ -40,5 +40,34 @@
 
 - `node --check server.js`
 - если трогался фронтенд: `node --check public/app.js` или `node --check public/workspace.js`
+- `npm run check` (включая cloud guard)
 - проверить экран/маршрут, которого касалась задача.
+
+## Облако (Render) vs Desktop (ПК)
+
+**Главное правило:** на Render **никогда** не запускать Chrome / Playwright. Dream Singles открывается **только** в AgencyOS Desktop на компьютере оператора.
+
+### Render (облако) — только лёгкое
+
+- CRM, база, логин, статистика, heartbeat, выдача cookies для Desktop (`/api/profiles/:id/launch`).
+- Переменная окружения: `DISABLE_SERVER_PLAYWRIGHT=1` (уже в `render.yaml`).
+- LetterBot на сервере **не запускает** браузер и не шлёт письма через Playwright.
+
+### Desktop (ПК) — тяжёлое
+
+- Окна Dream Singles (1 анкета = 1 профиль).
+- Будущий LetterBot с кликами на ПК.
+- При Connect клиент шлёт `X-Agency-Client: desktop` и `startBrowser: false`.
+
+### Что нельзя ломать при правках
+
+- Не убирать `DISABLE_SERVER_PLAYWRIGHT` с Render без апгрейда тарифа RAM.
+- Не менять connect-flow только в `app.js` или только в `server.js` — **деploy обоих вместе**.
+- Не добавлять вызовы `startDreamBrowser` без проверки `assertServerPlaywrightAllowed`.
+- Операторы входят только через Desktop (`clientType: desktop`).
+
+### Проверка версии
+
+- `GET /api/health` → `serverPlaywright: false` на Render.
+- `uiBuild` в health должен совпадать с `?v=` в `index.html` после деплоя.
 

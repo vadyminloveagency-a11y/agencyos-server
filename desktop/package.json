@@ -1,0 +1,42 @@
+{
+  "name": "agencyos-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AgencyOS desktop client for operators",
+  "main": "src/main.js",
+  "type": "module",
+  "author": "AgencyOS",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.agencyos.desktop",
+    "productName": "AgencyOS",
+    "directories": {
+      "output": "../release/desktop"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "publish": {
+      "provider": "generic",
+      "url": "https://example.com/agencyos-desktop-updates/"
+    }
+  }
+}

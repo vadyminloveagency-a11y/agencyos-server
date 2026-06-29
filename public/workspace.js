@@ -533,6 +533,16 @@ async function openWorkspaceDreamUrl(url) {
     await extensionCommand('OPEN_DREAM_URL', { url: targetUrl }, 45000);
     return;
   }
+  if (/^https:\/\/([^/]+\.)?dream-singles\.com\//i.test(targetUrl) && window.agencyElectron?.openDreamUrl && activeProfileId) {
+    const result = await window.agencyElectron.openDreamUrl(activeProfileId, targetUrl);
+    if (!result?.ok) throw new Error(result?.error || 'Could not open Dream window');
+    return;
+  }
+  if (window.agencyElectron?.openExternalUrl) {
+    const result = await window.agencyElectron.openExternalUrl(targetUrl);
+    if (!result?.ok) throw new Error(result?.error || 'Could not open link');
+    return;
+  }
   window.open(targetUrl, '_blank', 'noopener');
 }
 

@@ -44,7 +44,6 @@ const DREAM_LOGIN_URL = 'https://www.dream-singles.com/login';
 const DREAM_INBOX_URL = 'https://www.dream-singles.com/members/messaging/inbox';
 const DREAM_ACCOUNT_URL = 'https://www.dream-singles.com/members/account/';
 const DREAM_HEARTBEAT_INTERVAL_MS = Math.max(15_000, Number(process.env.DREAM_HEARTBEAT_INTERVAL_MS || 45_000) || 45_000);
-const DREAM_MAX_BROWSER_SESSIONS = Math.max(1, Number(process.env.DREAM_MAX_BROWSER_SESSIONS) || 1);
 const DREAM_BROWSER_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -66,6 +65,12 @@ const DREAM_XHR_HEADERS = {
 
 import * as letterBotService from './letterbot-service.js';
 import { ensurePlaywrightChromium, resolvePlaywrightBrowsersPath } from './playwright-browsers.js';
+import { assertServerPlaywrightAllowed, isServerPlaywrightDisabled } from './server-capabilities.js';
+const AGENCYOS_SERVER_VERSION = '0.1.3';
+const AGENCYOS_UI_BUILD = '20260629-12';
+const DREAM_MAX_BROWSER_SESSIONS = isServerPlaywrightDisabled()
+  ? 0
+  : Math.max(1, Number(process.env.DREAM_MAX_BROWSER_SESSIONS) || 1);
 const ALLOWED_STATUSES = ['', 'SERIOUS', 'SEXTER', 'OTHER'];
 const DEFAULT_SALARY_RATES = [
   { min: 0, max: 1499, percent: 40 },
@@ -116,9 +121,12 @@ app.get('/api/health', (req, res) => {
     ok: true,
     service: 'dream-team',
     storage: USE_POSTGRES ? 'postgres' : 'file',
+    serverVersion: AGENCYOS_SERVER_VERSION,
+    uiBuild: AGENCYOS_UI_BUILD,
+    serverPlaywright: !isServerPlaywrightDisabled(),
     letterBotBuild: letterBotService.LETTERBOT_BUILD_ID,
     dreamBrowsers: dreamBrowserSessions.size,
-    dreamBrowserLimit: DREAM_MAX_BROWSER_SESSIONS,
+    dreamBrowserLimit: isServerPlaywrightDisabled() ? 0 : DREAM_MAX_BROWSER_SESSIONS,
     memoryMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
     time: new Date().toISOString()
   });
@@ -2643,6 +2651,7 @@ function browserCookiesToDreamJar(cookies = []) {
 }
 
 async function startDreamBrowser(db, user, profileId, options = {}) {
+  assertServerPlaywrightAllowed('open Dream Singles in a server browser');
   const id = String(profileId || '');
   const profile = requireProfileForUser(db, user, id);
   const existing = dreamBrowserSessions.get(id);
@@ -3008,7 +3017,7 @@ async function openDreamSession(db, user, profileId, options = {}) {
       { includeJar: true }
     );
   } catch (directError) {
-    if (options.browserFallback === false) throw directError;
+    if (options.browserFallback === false || isServerPlaywrightDisabled()) throw directError;
     console.warn(`[dream-login] ${id}: direct login failed, trying hidden browser fallback: ${directError.message || directError}`);
     try {
       const browserSession = await startDreamBrowser(db, user, id, {
@@ -6298,30 +6307,64 @@ app.post('/api/profiles/:id/launch', requireUser, async (req, res) => {
   if (!profile.credentials?.login || !profile.credentials?.password) {
     return res.status(409).json({ ok: false, error: 'Dream Singles access has not been configured for this profile' });
   }
-  let result = { dreamCookies: [] };
-  try {
-    result = await resolveDreamSinglesAccess(
-      decryptCredential(profile.credentials.login),
-      decryptCredential(profile.credentials.password),
-      { includeCookies: true }
-    );
-    if (result.name && !/^Profile\s+\d+$/i.test(result.name)) profile.name = result.name;
-    if (result.photoData) {
-      const photoUrl = savePhotoData(id, '__profile', result.photoData);
-      if (photoUrl) profile.photoUrl = photoUrl;
-    } else if (result.photoUrl) {
-      profile.photoUrl = result.photoUrl;
+
+  let dreamCookies = [];
+  if (profile.serverDreamCookies) {
+    try {
+      const jar = deserializeDreamJar(decryptCredential(profile.serverDreamCookies));
+      if (jar.size) {
+        const inboxResponse = await agencyFetch(DREAM_INBOX_URL, {
+          method: 'GET',
+          headers: { ...DREAM_BROWSER_HEADERS, Referer: DREAM_LOGIN_URL }
+        }, jar);
+        const inboxHtml = await inboxResponse.text();
+        if (inboxResponse.ok && !dreamPageLooksLoggedOut(inboxHtml, inboxResponse.url)) {
+          dreamCookies = [...jar.entries()].map(([name, value]) => ({ name, value: String(value) }));
+        }
+      }
+    } catch (error) {
+      console.warn(`[dream-launch] ${id}: saved cookies unusable: ${error.message || error}`);
     }
-    profile.updatedAt = new Date().toISOString();
-  } catch (error) {
-    console.warn(`[dream-launch] ${id}: ${error.message || error}`);
-    result = { dreamCookies: [] };
   }
+
+  if (!dreamCookies.length) {
+    try {
+      const result = await resolveDreamSinglesAccess(
+        decryptCredential(profile.credentials.login),
+        decryptCredential(profile.credentials.password),
+        { includeCookies: true, includeJar: true }
+      );
+      if (result.name && !/^Profile\s+\d+$/i.test(result.name)) profile.name = result.name;
+      if (result.photoData) {
+        const photoUrl = savePhotoData(id, '__profile', result.photoData);
+        if (photoUrl) profile.photoUrl = photoUrl;
+      } else if (result.photoUrl) {
+        profile.photoUrl = result.photoUrl;
+      }
+      if (result.jar?.size) saveDreamSessionJar(profile, result.jar);
+      dreamCookies = Array.isArray(result.dreamCookies) ? result.dreamCookies : [];
+      profile.updatedAt = new Date().toISOString();
+    } catch (error) {
+      console.warn(`[dream-launch] ${id}: ${error.message || error}`);
+      return res.status(401).json({
+        ok: false,
+        error: error.message || 'Dream Singles login failed for this profile'
+      });
+    }
+  }
+
+  if (!dreamCookies.length) {
+    return res.status(401).json({
+      ok: false,
+      error: 'Dream Singles login returned no session. Update login and password in Admin, then Sync Dream.'
+    });
+  }
+
   const token = crypto.randomBytes(32).toString('hex');
   launchTokens.set(token, {
     profileId: id,
     userId: req.user.id,
-    dreamCookies: Array.isArray(result.dreamCookies) ? result.dreamCookies : [],
+    dreamCookies,
     expiresAt: Date.now() + 60_000
   });
   writeDb(db);
@@ -6353,13 +6396,32 @@ app.get('/api/profiles/:id/server-status', requireUser, (req, res) => {
   }
 });
 
+function isDesktopAgencyClient(req) {
+  return String(req.headers['x-agency-client'] || req.body?.clientMode || '').trim().toLowerCase() === 'desktop';
+}
+
 app.post('/api/profiles/:id/server-connect', requireUser, async (req, res) => {
   const db = readDb();
   const id = String(req.params.id);
   try {
-    const session = await openDreamSession(db, req.user, id, { force: req.body?.force === true });
+    const desktopClient = isDesktopAgencyClient(req);
+    let session;
+    let sessionWarning = '';
+    try {
+      session = await openDreamSession(db, req.user, id, {
+        force: req.body?.force === true,
+        browserFallback: !desktopClient
+      });
+    } catch (error) {
+      if (!desktopClient) throw error;
+      sessionWarning = error.message || 'Server Dream session was not opened';
+      session = dreamSessionStatus(id).connected
+        ? dreamSessions.get(id)
+        : { profileId: id, identity: { profileId: id, name: db.profiles[id]?.name || '' } };
+    }
     let browserWarning = '';
-    if (req.body?.keepOnline !== false) {
+    const shouldStartBrowser = !desktopClient && req.body?.keepOnline !== false && req.body?.startBrowser !== false;
+    if (shouldStartBrowser) {
       try {
         await startDreamBrowser(db, req.user, id, {
           force: req.body?.forceBrowser === true,
@@ -6371,8 +6433,15 @@ app.post('/api/profiles/:id/server-connect', requireUser, async (req, res) => {
       }
     }
     let sync = { imported: 0, letters: [] };
-    if (req.body?.syncInbox !== false) {
+    let syncWarning = '';
+    if (req.body?.syncInbox !== false && !desktopClient) {
       sync = await syncDreamInbox(id, { maxPages: req.body?.maxPages || 3 });
+    } else if (req.body?.syncInbox === true && desktopClient) {
+      try {
+        sync = await syncDreamInbox(id, { maxPages: req.body?.maxPages || 3 });
+      } catch (error) {
+        syncWarning = error.message || 'Inbox sync skipped';
+      }
     }
     res.json({
       ok: true,
@@ -6380,9 +6449,12 @@ app.post('/api/profiles/:id/server-connect', requireUser, async (req, res) => {
       status: dreamSessionStatus(id),
       imported: sync.imported || 0,
       letters: Array.isArray(sync.letters) ? sync.letters : [],
-      identity: session.identity || {},
+      identity: session?.identity || {},
       browser: dreamBrowserStatus(id),
-      browserWarning
+      browserWarning,
+      sessionWarning,
+      syncWarning,
+      clientMode: desktopClient ? 'desktop' : 'server'
     });
   } catch (error) {
     res.status(error.status || 500).json({ ok: false, error: error.message || 'Could not connect Dream Singles profile on the server' });
@@ -8108,10 +8180,14 @@ async function startServer() {
       currentAssignedUserForProfile
     };
     letterBotService.registerLetterBotRoutes(app, letterBotDeps);
-    letterBotService.startLetterBotScheduler(letterBotDeps);
-    ensurePlaywrightChromium(PLAYWRIGHT_BROWSERS_DIR).catch(error => {
-      console.warn(`[playwright] Warmup skipped: ${error.message || error}`);
-    });
+    if (isServerPlaywrightDisabled()) {
+      console.log('[server] Playwright disabled on this host (DISABLE_SERVER_PLAYWRIGHT=1). Dream browsers run on operator Desktop only.');
+    } else {
+      letterBotService.startLetterBotScheduler(letterBotDeps);
+      ensurePlaywrightChromium(PLAYWRIGHT_BROWSERS_DIR).catch(error => {
+        console.warn(`[playwright] Warmup skipped: ${error.message || error}`);
+      });
+    }
     app.listen(PORT, () => {
       console.log(`Dream Local CRM is running: http://localhost:${PORT}`);
     });

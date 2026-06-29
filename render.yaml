@@ -12,6 +12,10 @@ services:
       - key: NODE_ENV
         value: production
       - key: DREAM_MAX_BROWSER_SESSIONS
+        value: "0"
+      - key: DISABLE_SERVER_PLAYWRIGHT
+        value: "1"
+      - key: SKIP_PLAYWRIGHT_INSTALL
         value: "1"
       - key: DREAM_TEAM_DATA_DIR
         value: /var/data
