@@ -3170,7 +3170,7 @@ async function loadWorkspaceHistoryIntoPanel(group, options = {}) {
       await scanAndSaveInboxTargets([{
         id: targetGroup.id,
         name: targetGroup.name || ''
-      }], WORKSPACE_FULL_SYNC_PAGES, {
+      }], WORKSPACE_INBOX_SYNC_PAGES, {
         stopAtExisting: true
       });
       await reloadWorkspaceInbox();
@@ -3770,30 +3770,6 @@ async function syncCurrentManLetterPage(pageNumber, button, options = {}) {
     setWorkspaceActionStatus('');
     renderCurrentWorkspaceState();
   }
-}
-
-function autoSyncSelectedManFromList() {
-  if (workspaceListFilter !== 'inbox') return;
-  if (!workspaceSelectedId) return;
-  const group = findGroup(workspaceSelectedId);
-  const syncId = String(group?.id || workspaceSelectedId || '');
-  if (syncId) {
-    workspaceRowSyncIds.add(syncId);
-    renderCurrentWorkspaceState();
-  }
-  Promise.resolve(scanAndSaveInboxTargets([{
-    id: group?.id || workspaceSelectedId,
-    name: group?.name || ''
-  }], WORKSPACE_FULL_SYNC_PAGES, {
-    stopAtExisting: true
-  }))
-    .then(() => reloadWorkspaceInbox())
-    .catch(error => console.warn('Could not archive man inbox letters', error))
-    .finally(() => {
-      workspaceRowSyncIds.delete(syncId);
-      renderCurrentWorkspaceState();
-      renderList();
-    });
 }
 
 async function apiFetch(url, options = {}) {
@@ -4692,7 +4668,6 @@ menList.addEventListener('click', event => {
   const button = event.target.closest('.workspace-man');
   if (button) {
     selectLetterGroup(button.dataset.id, button.dataset.letterKey || '');
-    autoSyncSelectedManFromList();
   }
 });
 
@@ -4755,7 +4730,6 @@ menList.addEventListener('keydown', event => {
   if (!item) return;
   event.preventDefault();
   selectLetterGroup(item.dataset.id, item.dataset.letterKey || '');
-  autoSyncSelectedManFromList();
 });
 
 document.addEventListener('click', event => {
